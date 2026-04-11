@@ -1,7 +1,9 @@
-import type { NextConfig } from "next";
+import type { NextConfig } from 'next'
 
 const nextConfig: NextConfig = {
-  /* config options here */
-};
+  // jsPDF runs only on server-side routes, mark as external for edge compatibility
+  serverExternalPackages: ['jspdf', 'jspdf-autotable'],
+  experimental: {},
+}
 
-export default nextConfig;
+export default nextConfig

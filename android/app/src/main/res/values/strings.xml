@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">CollectEase</string>
+    <string name="title_activity_main">CollectEase</string>
+    <string name="package_name">in.collectease.app</string>
+    <string name="custom_url_scheme">in.collectease.app</string>
+</resources>
