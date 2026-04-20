@@ -12,20 +12,34 @@ import { formatCurrency } from '@/lib/utils'
 interface MarkPaidDialogProps {
   open: boolean
   onClose: () => void
-  invoice: { id: string; invoice_number: string; total_amount: number; business_id: string }
+  invoice: {
+    id: string
+    invoice_number: string
+    total_amount: number
+    paid_amount?: number | null
+    business_id: string
+  }
 }
 
 export function MarkPaidDialog({ open, onClose, invoice }: MarkPaidDialogProps) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
+
+  const alreadyPaid = Number(invoice.paid_amount || 0)
+  const remaining = invoice.total_amount - alreadyPaid
+
   const [form, setForm] = useState({
-    amount: String(invoice.total_amount),
+    amount: String(remaining > 0 ? remaining : invoice.total_amount),
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMethod: 'upi',
     reference: '',
     notes: '',
   })
+
+  const enteredAmount = parseFloat(form.amount) || 0
+  const isPartial = enteredAmount < remaining - 0.01 // 1 paise tolerance
+  const newTotal = alreadyPaid + enteredAmount
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -37,7 +51,7 @@ export function MarkPaidDialog({ open, onClose, invoice }: MarkPaidDialogProps) 
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           invoice_id: invoice.id,
-          amount: parseFloat(form.amount),
+          amount: enteredAmount,
           payment_date: form.paymentDate,
           payment_method: form.paymentMethod,
           reference: form.reference || null,
@@ -50,7 +64,15 @@ export function MarkPaidDialog({ open, onClose, invoice }: MarkPaidDialogProps) 
         throw new Error(d.error)
       }
 
-      toast({ title: 'Payment recorded!', description: `${invoice.invoice_number} marked as paid`, variant: 'success' })
+      const { isFullyPaid } = await res.clone().json().catch(() => ({}))
+
+      toast({
+        title: isFullyPaid ? 'Fully paid!' : 'Partial payment recorded',
+        description: isFullyPaid
+          ? `${invoice.invoice_number} is now fully paid`
+          : `${formatCurrency(enteredAmount)} recorded. ${formatCurrency(invoice.total_amount - newTotal)} still outstanding.`,
+        variant: 'success',
+      })
       onClose()
       router.refresh()
     } catch (err: any) {
@@ -64,21 +86,46 @@ export function MarkPaidDialog({ open, onClose, invoice }: MarkPaidDialogProps) 
     <Dialog open={open} onOpenChange={onClose}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Mark Invoice as Paid</DialogTitle>
+          <DialogTitle>Record Payment</DialogTitle>
           <DialogDescription>
-            Record payment for {invoice.invoice_number} · {formatCurrency(invoice.total_amount)}
+            {invoice.invoice_number} · Total {formatCurrency(invoice.total_amount)}
           </DialogDescription>
         </DialogHeader>
 
-        <form onSubmit={handleSubmit} className="space-y-4 mt-2">
+        {/* Payment summary */}
+        {alreadyPaid > 0 && (
+          <div className="bg-blue-50 rounded-lg p-3 text-sm space-y-1">
+            <div className="flex justify-between text-blue-800">
+              <span>Already received</span>
+              <span className="font-medium">{formatCurrency(alreadyPaid)}</span>
+            </div>
+            <div className="flex justify-between text-blue-900 font-semibold border-t border-blue-200 pt-1">
+              <span>Remaining balance</span>
+              <span>{formatCurrency(remaining)}</span>
+            </div>
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4 mt-1">
           <Input
             label="Amount Received (₹)"
             type="number"
             step="0.01"
+            min="0.01"
+            max={remaining > 0 ? remaining : undefined}
             value={form.amount}
             onChange={e => setForm(p => ({ ...p, amount: e.target.value }))}
             required
           />
+
+          {/* Partial payment notice */}
+          {isPartial && enteredAmount > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 text-xs text-amber-800">
+              Partial payment — {formatCurrency(invoice.total_amount - newTotal)} will still be outstanding.
+              Reminders will continue until fully paid.
+            </div>
+          )}
+
           <Input
             label="Payment Date"
             type="date"
@@ -117,7 +164,7 @@ export function MarkPaidDialog({ open, onClose, invoice }: MarkPaidDialogProps) 
           <div className="flex gap-3 pt-2">
             <Button type="button" variant="outline" onClick={onClose} className="flex-1">Cancel</Button>
             <Button type="submit" variant="success" loading={loading} className="flex-1">
-              Record Payment
+              {isPartial ? 'Record Partial Payment' : 'Record Payment'}
             </Button>
           </div>
         </form>

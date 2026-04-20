@@ -17,7 +17,7 @@ export function ReportExportButtons({ businessId }: { businessId: string }) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `collectease-report-${new Date().toISOString().split('T')[0]}.csv`
+      a.download = `sirpl-report-${new Date().toISOString().split('T')[0]}.csv`
       a.click()
       URL.revokeObjectURL(url)
     } catch {
@@ -35,7 +35,7 @@ export function ReportExportButtons({ businessId }: { businessId: string }) {
       const url = URL.createObjectURL(blob)
       const a = document.createElement('a')
       a.href = url
-      a.download = `collectease-report-${new Date().toISOString().split('T')[0]}.pdf`
+      a.download = `sirpl-report-${new Date().toISOString().split('T')[0]}.pdf`
       a.click()
       URL.revokeObjectURL(url)
     } catch {

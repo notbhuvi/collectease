@@ -4,7 +4,7 @@ import { PageHeader } from '@/components/layout/page-header'
 import { StatCard } from '@/components/ui/stat-card'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { formatCurrency, formatDate, getStatusColor, getDaysOverdue } from '@/lib/utils'
+import { formatCurrency, formatDate, getDaysOverdue } from '@/lib/utils'
 import {
   IndianRupee, FileText, Users, AlertTriangle,
   TrendingUp, Clock
@@ -27,44 +27,72 @@ export default async function DashboardPage() {
 
   const bid = business.id
 
-  // Parallel data fetching
+  // First of current month for "this month" filter
+  const now = new Date()
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0]
+
   const [
     { data: invoices },
     { data: clients },
     { data: recentPayments },
+    { data: paymentsThisMonth },
   ] = await Promise.all([
     supabase.from('invoices').select('*, client:clients(name)').eq('business_id', bid),
     supabase.from('clients').select('id').eq('business_id', bid),
-    supabase.from('payments').select('*, invoice:invoices(invoice_number, client:clients(name))').eq('business_id', bid).order('created_at', { ascending: false }).limit(5),
+    supabase.from('payments')
+      .select('*, invoice:invoices(invoice_number, client:clients(name))')
+      .eq('business_id', bid)
+      .order('created_at', { ascending: false })
+      .limit(5),
+    supabase.from('payments')
+      .select('amount')
+      .eq('business_id', bid)
+      .gte('payment_date', monthStart),
   ])
 
   const allInvoices = invoices || []
+
+  // Remaining balance per invoice = total_amount - (paid_amount || 0)
+  function remaining(inv: { total_amount: number; paid_amount?: number | null }) {
+    return inv.total_amount - (inv.paid_amount || 0)
+  }
+
+  // Partial = has some money but not fully paid
+  function isPartial(inv: { status: string; paid_amount?: number | null }) {
+    return inv.status !== 'paid' && (inv.paid_amount || 0) > 0
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+
   const unpaid = allInvoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled')
-  const overdue = allInvoices.filter(i => i.status === 'overdue')
-  const paid = allInvoices.filter(i => i.status === 'paid')
+  // Treat as overdue if DB says so OR if due_date has already passed (cron may not have run yet)
+  const overdue = allInvoices.filter(i =>
+    i.status !== 'paid' && i.status !== 'cancelled' &&
+    (i.status === 'overdue' || i.due_date < today)
+  )
 
-  const totalReceivables = unpaid.reduce((sum, i) => sum + (i.total_amount || 0), 0)
-  const overdueAmount = overdue.reduce((sum, i) => sum + (i.total_amount || 0), 0)
-  const paidThisMonth = paid
-    .filter(i => {
-      if (!i.paid_at) return false
-      const d = new Date(i.paid_at)
-      const now = new Date()
-      return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-    })
-    .reduce((sum, i) => sum + (i.paid_amount || i.total_amount || 0), 0)
+  // Receivables = sum of remaining balances (not full total_amount)
+  const totalReceivables = unpaid.reduce((sum, i) => sum + remaining(i), 0)
 
-  // Aging buckets
+  // Overdue = sum of remaining balances on overdue invoices
+  const overdueAmount = overdue.reduce((sum, i) => sum + remaining(i), 0)
+
+  // Collected this month = sum from payments table (captures partial payments too)
+  const collectedThisMonth = (paymentsThisMonth || []).reduce((sum, p) => sum + Number(p.amount), 0)
+  const paymentsThisMonthCount = (paymentsThisMonth || []).length
+
+  // Aging buckets — use remaining balance
   const aging = { b0: 0, b30: 0, b60: 0, b90: 0 }
   overdue.forEach(inv => {
     const days = getDaysOverdue(inv.due_date)
-    if (days <= 30) aging.b0 += inv.total_amount
-    else if (days <= 60) aging.b30 += inv.total_amount
-    else if (days <= 90) aging.b60 += inv.total_amount
-    else aging.b90 += inv.total_amount
+    const bal = remaining(inv)
+    if (days <= 30) aging.b0 += bal
+    else if (days <= 60) aging.b30 += bal
+    else if (days <= 90) aging.b60 += bal
+    else aging.b90 += bal
   })
 
-  // Recent overdue invoices
+  // Recent overdue — sorted by most overdue
   const recentOverdue = overdue
     .sort((a, b) => getDaysOverdue(b.due_date) - getDaysOverdue(a.due_date))
     .slice(0, 5)
@@ -94,12 +122,8 @@ export default async function DashboardPage() {
         />
         <StatCard
           title="Collected This Month"
-          value={formatCurrency(paidThisMonth)}
-          subtitle={`${paid.filter(i => {
-            if (!i.paid_at) return false
-            const d = new Date(i.paid_at); const now = new Date()
-            return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
-          }).length} invoices paid`}
+          value={formatCurrency(collectedThisMonth)}
+          subtitle={`${paymentsThisMonthCount} payment${paymentsThisMonthCount !== 1 ? 's' : ''} received`}
           icon={<TrendingUp className="h-5 w-5" />}
           valueClassName="text-green-700"
         />
@@ -174,18 +198,30 @@ export default async function DashboardPage() {
             </div>
           ) : (
             <div className="divide-y divide-gray-100">
-              {recentOverdue.map(inv => (
-                <div key={inv.id} className="flex items-center justify-between py-3">
-                  <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 truncate">{inv.client?.name || 'Unknown Client'}</p>
-                    <p className="text-xs text-gray-500">{inv.invoice_number} · Due {formatDate(inv.due_date)}</p>
+              {recentOverdue.map(inv => {
+                const bal = remaining(inv)
+                const partial = isPartial(inv)
+                return (
+                  <div key={inv.id} className="flex items-center justify-between py-3">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{inv.client?.name || 'Unknown Client'}</p>
+                      <p className="text-xs text-gray-500">{inv.invoice_number} · Due {formatDate(inv.due_date)}</p>
+                      {partial && (
+                        <p className="text-xs text-amber-600">
+                          {formatCurrency(inv.paid_amount)} paid · {formatCurrency(bal)} remaining
+                        </p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-3 ml-4">
+                      <div className="text-right">
+                        <p className="text-sm font-semibold text-red-600">{formatCurrency(bal)}</p>
+                        {partial && <p className="text-xs text-gray-400">of {formatCurrency(inv.total_amount)}</p>}
+                      </div>
+                      <Badge variant="destructive">{getDaysOverdue(inv.due_date)}d overdue</Badge>
+                    </div>
                   </div>
-                  <div className="flex items-center gap-3 ml-4">
-                    <span className="text-sm font-semibold text-red-600">{formatCurrency(inv.total_amount)}</span>
-                    <Badge variant="destructive">{getDaysOverdue(inv.due_date)}d overdue</Badge>
-                  </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </CardContent>

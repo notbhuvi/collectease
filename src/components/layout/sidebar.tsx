@@ -4,8 +4,9 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, FileText, Users, BarChart3,
-  Settings, LogOut, Zap, Menu, X
+  Settings, LogOut, Menu, X
 } from 'lucide-react'
+import Image from 'next/image'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useRouter } from 'next/navigation'
@@ -38,11 +39,9 @@ export function Sidebar({ businessName }: SidebarProps) {
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-100">
-        <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-blue-600">
-          <Zap className="h-4 w-4 text-white" />
-        </div>
+        <Image src="/sirpl-logo.png" alt="SIRPL" width={36} height={36} className="rounded-lg object-contain" />
         <div>
-          <p className="text-sm font-bold text-gray-900">CollectEase</p>
+          <p className="text-sm font-bold text-gray-900">SIRPL</p>
           {businessName && <p className="text-xs text-gray-400 truncate max-w-[120px]">{businessName}</p>}
         </div>
       </div>
@@ -93,10 +92,8 @@ export function Sidebar({ businessName }: SidebarProps) {
       {/* Mobile header bar */}
       <div className="lg:hidden fixed top-0 left-0 right-0 z-40 bg-white border-b border-gray-200 flex items-center justify-between px-4 h-14">
         <div className="flex items-center gap-2">
-          <div className="flex h-7 w-7 items-center justify-center rounded-lg bg-blue-600">
-            <Zap className="h-3.5 w-3.5 text-white" />
-          </div>
-          <span className="text-sm font-bold text-gray-900">CollectEase</span>
+          <Image src="/sirpl-logo.png" alt="SIRPL" width={28} height={28} className="rounded object-contain" />
+          <span className="text-sm font-bold text-gray-900">SIRPL</span>
         </div>
         <button onClick={() => setMobileOpen(true)} className="p-2 text-gray-600">
           <Menu className="h-5 w-5" />

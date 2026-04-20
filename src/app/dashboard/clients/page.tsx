@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import { Users, Plus } from 'lucide-react'
 import { AddClientButton } from '@/components/clients/add-client-button'
+import { DeleteClientButton } from '@/components/clients/delete-client-button'
 
 export default async function ClientsPage() {
   const supabase = await createClient()
@@ -73,6 +74,7 @@ export default async function ClientsPage() {
                       <th className="text-center text-xs font-medium text-gray-500 px-4 py-3">Invoices</th>
                       <th className="text-center text-xs font-medium text-gray-500 px-4 py-3">Avg Delay</th>
                       <th className="text-center text-xs font-medium text-gray-500 px-6 py-3">Risk</th>
+                      <th className="px-4 py-3"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-50">
@@ -103,6 +105,9 @@ export default async function ClientsPage() {
                             {client.risk_label}
                           </Badge>
                         </td>
+                        <td className="px-4 py-4 text-right">
+                          <DeleteClientButton clientId={client.id} clientName={client.name} />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
@@ -118,7 +123,10 @@ export default async function ClientsPage() {
                         <p className="font-medium text-gray-900">{client.name}</p>
                         {client.email && <p className="text-xs text-gray-400">{client.email}</p>}
                       </div>
-                      <Badge variant={riskVariant[client.risk_label] || 'secondary'}>{client.risk_label}</Badge>
+                      <div className="flex items-center gap-2">
+                        <Badge variant={riskVariant[client.risk_label] || 'secondary'}>{client.risk_label}</Badge>
+                        <DeleteClientButton clientId={client.id} clientName={client.name} />
+                      </div>
                     </div>
                     <div className="flex justify-between text-sm">
                       <span className="text-gray-500">{client.total_invoices} invoices · {client.avg_delay_days > 0 ? `${client.avg_delay_days}d avg delay` : 'on time'}</span>

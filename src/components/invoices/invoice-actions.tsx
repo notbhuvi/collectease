@@ -15,6 +15,7 @@ interface InvoiceActionsProps {
     status: string
     invoice_number: string
     total_amount: number
+    paid_amount?: number | null
     client_id: string
     business_id: string
   }
@@ -88,7 +89,7 @@ export function InvoiceActions({ invoice }: InvoiceActionsProps) {
                 className="flex items-center gap-2 px-3 py-2 rounded-lg text-green-700 hover:bg-green-50 cursor-pointer outline-none"
               >
                 <CheckCircle className="h-4 w-4" />
-                Mark as Paid
+                {invoice.paid_amount && invoice.paid_amount > 0 ? 'Record Payment' : 'Mark as Paid'}
               </DropdownMenu.Item>
             )}
 

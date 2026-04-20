@@ -1,12 +1,7 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createServiceClient } from '@/lib/supabase/server'
-import {
-  buildReminderMessage,
-  sendWhatsAppMessage,
-  sendEmail,
-  getReminderType,
-} from '@/lib/messaging'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { buildReminderMessage, sendEmail, getReminderType } from '@/lib/messaging'
+import { generateReminderPDF } from '@/lib/pdf'
 import { getDaysOverdue } from '@/lib/utils'
 
 export async function POST(request: Request) {
@@ -15,15 +10,14 @@ export async function POST(request: Request) {
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
   const body = await request.json()
-  const { invoiceId, manual } = body
+  const { invoiceId } = body
 
-  // Fetch invoice with all needed relations
   const { data: invoice } = await supabase
     .from('invoices')
     .select(`
       *,
-      client:clients(id, name, email, phone),
-      business:businesses(id, name, email, phone, user_id)
+      client:clients(id, name, email, phone, gstin, address, city, state),
+      business:businesses(id, name, email, phone, gstin, address, city, state, pincode, user_id)
     `)
     .eq('id', invoiceId)
     .single()
@@ -35,13 +29,17 @@ export async function POST(request: Request) {
   }
 
   const daysOverdue = getDaysOverdue(invoice.due_date)
-  const reminderType = manual ? getReminderType(daysOverdue) : getReminderType(daysOverdue)
+  const reminderType = getReminderType(daysOverdue)
+  const paidAmount = Number(invoice.paid_amount || 0)
+  const remainingAmount = invoice.total_amount - paidAmount
 
   const ctx = {
     businessName: invoice.business.name,
     clientName: invoice.client.name,
     invoiceNumber: invoice.invoice_number,
-    amount: invoice.total_amount,
+    amount: remainingAmount,
+    totalAmount: invoice.total_amount,
+    paidAmount,
     dueDate: invoice.due_date,
     daysOverdue,
     businessPhone: invoice.business.phone,
@@ -49,58 +47,80 @@ export async function POST(request: Request) {
   }
 
   const message = buildReminderMessage(reminderType, ctx)
-  const subject = getReminderSubject(reminderType, invoice.invoice_number)
 
-  let whatsappResult: { success: boolean; error?: string } = { success: false, error: 'No phone' }
-  let emailResult: { success: boolean; error?: string } = { success: false, error: 'No email' }
-
-  if (invoice.client.phone) {
-    whatsappResult = await sendWhatsAppMessage(invoice.client.phone, message)
+  // Generate PDF attachment
+  let pdfAttachment: { name: string; base64: string } | undefined
+  try {
+    const pdfBuffer = await generateReminderPDF(
+      {
+        name: invoice.business.name,
+        gstin: invoice.business.gstin,
+        phone: invoice.business.phone,
+        email: invoice.business.email,
+        address: invoice.business.address,
+        city: invoice.business.city,
+        state: invoice.business.state,
+        pincode: invoice.business.pincode,
+      },
+      {
+        name: invoice.client.name,
+        email: invoice.client.email,
+        phone: invoice.client.phone,
+        gstin: invoice.client.gstin,
+        address: invoice.client.address,
+        city: invoice.client.city,
+        state: invoice.client.state,
+      },
+      {
+        invoice_number: invoice.invoice_number,
+        amount: invoice.amount,
+        tax_amount: invoice.tax_amount,
+        total_amount: invoice.total_amount,
+        issue_date: invoice.issue_date,
+        due_date: invoice.due_date,
+        description: invoice.description,
+        status: invoice.status,
+        paid_amount: invoice.paid_amount,
+      }
+    )
+    const base64 = Buffer.from(pdfBuffer).toString('base64')
+    pdfAttachment = { name: `Outstanding-${invoice.invoice_number}.pdf`, base64 }
+  } catch (pdfErr) {
+    console.error('PDF generation failed:', pdfErr)
+    // Continue without attachment
   }
 
+  let emailResult: { success: boolean; error?: string } = { success: false, error: 'No email on file' }
   if (invoice.client.email) {
-    emailResult = await sendEmail(invoice.client.email, subject, message)
+    emailResult = await sendEmail(
+      invoice.client.email,
+      `Outstanding Payment Reminder — Invoice ${invoice.invoice_number}`,
+      message,
+      reminderType,
+      pdfAttachment,
+      ctx
+    )
   }
 
-  const channel = invoice.client.phone && invoice.client.email ? 'both'
-    : invoice.client.phone ? 'whatsapp' : 'email'
-
-  const overallSuccess = whatsappResult.success || emailResult.success
-
-  // Log reminder
   const serviceClient = await createServiceClient()
+
   await serviceClient.from('reminders').insert({
     invoice_id: invoiceId,
     business_id: invoice.business.id,
     type: reminderType,
-    channel,
+    channel: 'email',
     message,
-    status: overallSuccess ? 'sent' : 'failed',
-    error: overallSuccess ? null : `WA: ${whatsappResult.error || ''} | Email: ${emailResult.error || ''}`,
+    status: emailResult.success ? 'sent' : 'failed',
+    error: emailResult.success ? null : emailResult.error,
     sent_at: new Date().toISOString(),
   })
 
-  // Update invoice reminder count
   await serviceClient.from('invoices').update({
     reminder_count: (invoice.reminder_count || 0) + 1,
     last_reminder_at: new Date().toISOString(),
   }).eq('id', invoiceId)
 
-  // Log escalation if legal
-  if (reminderType === 'legal') {
-    await serviceClient.from('escalation_logs').insert({
-      invoice_id: invoiceId,
-      business_id: invoice.business.id,
-      type: 'formal_reminder',
-    })
-  }
-
-  return NextResponse.json({
-    success: overallSuccess,
-    type: reminderType,
-    whatsapp: whatsappResult,
-    email: emailResult,
-  })
+  return NextResponse.json({ success: emailResult.success, type: reminderType, email: emailResult })
 }
 
 export async function GET(request: Request) {
@@ -128,14 +148,4 @@ export async function GET(request: Request) {
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
 
   return NextResponse.json({ reminders: data })
-}
-
-function getReminderSubject(type: string, invoiceNumber: string): string {
-  const subjects: Record<string, string> = {
-    friendly: `Friendly Reminder: Invoice ${invoiceNumber} Payment Due`,
-    firm: `Payment Reminder: Invoice ${invoiceNumber} Overdue`,
-    final_warning: `Final Warning: Invoice ${invoiceNumber} — Immediate Payment Required`,
-    legal: `Legal Notice: Invoice ${invoiceNumber} — Recovery Action Initiated`,
-  }
-  return subjects[type] || `Invoice ${invoiceNumber} Reminder`
 }

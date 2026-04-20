@@ -33,8 +33,11 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  const protectedPrefixes = ['/dashboard', '/transport', '/portal', '/admin']
+  const isProtected = protectedPrefixes.some(p => pathname.startsWith(p))
+
   // Redirect unauthenticated users from protected routes
-  if (!user && pathname.startsWith('/dashboard')) {
+  if (!user && isProtected) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
@@ -47,5 +50,5 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/auth/:path*'],
+  matcher: ['/dashboard/:path*', '/transport/:path*', '/portal/:path*', '/admin/:path*', '/auth/:path*'],
 }

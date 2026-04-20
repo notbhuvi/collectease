@@ -62,6 +62,8 @@ export async function POST(request: Request) {
       description: body.description,
       notes: body.notes,
       status: body.status || 'sent',
+      reminder_initial_delay: body.reminder_initial_delay ?? 0,
+      reminder_interval_days: body.reminder_interval_days ?? 7,
     })
     .select()
     .single()

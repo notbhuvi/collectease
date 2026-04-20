@@ -1,3 +1,60 @@
+// ── Role system ───────────────────────────────────────────────────────────────
+export type UserRole = 'admin' | 'accounts' | 'sales' | 'transport_team' | 'transporter'
+
+export interface Profile {
+  id: string
+  email: string
+  full_name: string | null
+  role: UserRole
+  company_name: string | null
+  created_at: string
+}
+
+// ── Transport ─────────────────────────────────────────────────────────────────
+export type LoadStatus = 'open' | 'closed' | 'awarded' | 'completed'
+
+export interface TransportLoad {
+  id: string
+  created_by: string
+  pickup_location: string
+  drop_location: string
+  material: string
+  weight: string
+  vehicle_type: string
+  pickup_date: string
+  bidding_deadline: string
+  status: LoadStatus
+  notes: string | null
+  created_at: string
+  // joined
+  creator?: { full_name: string | null; email: string }
+  bids?: TransportBid[]
+  awarded?: AwardedLoad
+}
+
+export interface TransportBid {
+  id: string
+  load_id: string
+  transporter_id: string
+  bid_amount: number
+  remarks: string | null
+  created_at: string
+  updated_at: string
+  // joined
+  transporter?: { full_name: string | null; company_name: string | null; email: string }
+}
+
+export interface AwardedLoad {
+  id: string
+  load_id: string
+  transporter_id: string
+  final_amount: number
+  awarded_by: string | null
+  awarded_at: string
+  // joined
+  transporter?: { full_name: string | null; company_name: string | null }
+}
+
 export type InvoiceStatus = 'draft' | 'sent' | 'paid' | 'overdue' | 'cancelled'
 export type RiskLabel = 'good' | 'moderate' | 'risky'
 export type ReminderType = 'friendly' | 'firm' | 'final_warning' | 'legal'
@@ -52,6 +109,8 @@ export interface Invoice {
   notes: string | null
   reminder_count: number
   last_reminder_at: string | null
+  reminder_initial_delay: number
+  reminder_interval_days: number
   paid_at: string | null
   paid_amount: number | null
   created_at: string

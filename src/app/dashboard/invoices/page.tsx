@@ -59,6 +59,12 @@ export default async function InvoicesPage({
     paid: 'success',
     overdue: 'destructive',
     cancelled: 'secondary',
+    partial: 'warning',
+  }
+
+  function getDisplayStatus(inv: { status: string; paid_amount?: number | null; total_amount: number }) {
+    if (inv.status !== 'paid' && inv.paid_amount && inv.paid_amount > 0) return 'partial'
+    return inv.status
   }
 
   return (
@@ -122,12 +128,17 @@ export default async function InvoicesPage({
                             <p className="text-xs text-red-500">{getDaysOverdue(inv.due_date)}d overdue</p>
                           )}
                         </td>
-                        <td className="px-4 py-4 text-right font-semibold text-gray-900">
-                          {formatCurrency(inv.total_amount)}
+                        <td className="px-4 py-4 text-right">
+                          <p className="font-semibold text-gray-900">{formatCurrency(inv.total_amount)}</p>
+                          {inv.paid_amount && inv.paid_amount > 0 && inv.status !== 'paid' && (
+                            <p className="text-xs text-amber-600">
+                              {formatCurrency(inv.total_amount - inv.paid_amount)} remaining
+                            </p>
+                          )}
                         </td>
                         <td className="px-4 py-4 text-center">
-                          <Badge variant={statusVariant[inv.status] || 'secondary'}>
-                            {inv.status}
+                          <Badge variant={statusVariant[getDisplayStatus(inv)] || 'secondary'}>
+                            {getDisplayStatus(inv)}
                           </Badge>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -148,13 +159,18 @@ export default async function InvoicesPage({
                         <p className="font-medium text-gray-900">{inv.invoice_number}</p>
                         <p className="text-sm text-gray-500">{inv.client?.name || '–'}</p>
                       </div>
-                      <Badge variant={statusVariant[inv.status] || 'secondary'}>{inv.status}</Badge>
+                      <Badge variant={statusVariant[getDisplayStatus(inv)] || 'secondary'}>
+                        {getDisplayStatus(inv)}
+                      </Badge>
                     </div>
                     <div className="flex justify-between items-center">
                       <div>
                         <p className="text-xs text-gray-400">Due {formatDate(inv.due_date)}</p>
                         {inv.status === 'overdue' && (
                           <p className="text-xs text-red-500">{getDaysOverdue(inv.due_date)}d overdue</p>
+                        )}
+                        {inv.paid_amount && inv.paid_amount > 0 && inv.status !== 'paid' && (
+                          <p className="text-xs text-amber-600">{formatCurrency(inv.total_amount - inv.paid_amount)} remaining</p>
                         )}
                       </div>
                       <div className="flex items-center gap-3">

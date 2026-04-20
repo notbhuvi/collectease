@@ -36,19 +36,30 @@ export async function POST(request: Request) {
 
   if (paymentError) return NextResponse.json({ error: paymentError.message }, { status: 500 })
 
-  // Update invoice status to paid
+  // Sum all payments to get running total
+  const { data: allPayments } = await supabase
+    .from('payments')
+    .select('amount')
+    .eq('invoice_id', body.invoice_id)
+
+  const totalPaid = (allPayments || []).reduce((sum, p) => sum + Number(p.amount), 0)
+  const isFullyPaid = totalPaid >= invoice.total_amount
+
+  // Only mark 'paid' when fully settled; keep sent/overdue + track paid_amount for partial
+  const invoiceUpdate: Record<string, unknown> = { paid_amount: totalPaid }
+  if (isFullyPaid) {
+    invoiceUpdate.status = 'paid'
+    invoiceUpdate.paid_at = new Date().toISOString()
+  }
+
   const { error: updateError } = await supabase
     .from('invoices')
-    .update({
-      status: 'paid',
-      paid_at: new Date().toISOString(),
-      paid_amount: body.amount,
-    })
+    .update(invoiceUpdate)
     .eq('id', body.invoice_id)
 
   if (updateError) return NextResponse.json({ error: updateError.message }, { status: 500 })
 
-  return NextResponse.json({ payment }, { status: 201 })
+  return NextResponse.json({ payment, totalPaid, isFullyPaid }, { status: 201 })
 }
 
 export async function GET() {

@@ -4,97 +4,256 @@ interface ReminderContext {
   businessName: string
   clientName: string
   invoiceNumber: string
-  amount: number
+  amount: number          // remaining (outstanding) amount
+  totalAmount?: number    // original invoice total
+  paidAmount?: number     // already received
   dueDate: string
   daysOverdue: number
   businessPhone?: string
   businessEmail?: string
 }
 
-export function buildReminderMessage(type: string, ctx: ReminderContext): string {
+export function buildReminderMessage(_type: string, ctx: ReminderContext): string {
   const amount = formatCurrency(ctx.amount)
   const due = formatDate(ctx.dueDate)
 
-  switch (type) {
-    case 'friendly':
-      return `Dear ${ctx.clientName},
+  return `Dear Sir/Ma'am,
 
-This is a friendly reminder that invoice *${ctx.invoiceNumber}* for *${amount}* was due on ${due}.
+This is with reference to the outstanding payment reminder for Invoice No. ${ctx.invoiceNumber} amounting to ${amount}, which was due on ${due}.
 
-If you have already processed the payment, please ignore this message and share the payment details.
+We kindly request you to arrange the pending payment at the earliest convenience. The details of the outstanding invoice are attached for your ready reference.
 
-For any queries, please contact us.
+Your prompt attention to this matter will be highly appreciated.
 
 Regards,
-${ctx.businessName}
-${ctx.businessPhone || ''}`
+SIRPL Accounts Dept.${ctx.businessPhone ? `\n${ctx.businessPhone}` : ''}${ctx.businessEmail ? `\n${ctx.businessEmail}` : ''}`
+}
 
-    case 'firm':
-      return `Dear ${ctx.clientName},
+function buildEmailHtml(body: string, ctx?: ReminderContext): string {
+  const escaped = body
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/\n/g, '<br>')
 
-We would like to draw your attention to the outstanding invoice *${ctx.invoiceNumber}* for *${amount}*, which was due on ${due} — now ${ctx.daysOverdue} days overdue.
+  // Invoice summary table rows (only if context provided)
+  const invoiceTable = ctx ? `
+    <table width="100%" cellpadding="0" cellspacing="0" style="margin:20px 0;border-collapse:collapse;border-radius:6px;overflow:hidden">
+      <tr style="background:#f3f4f6">
+        <td style="padding:8px 12px;font-size:12px;font-weight:bold;color:#6b7280;width:50%">Invoice Number</td>
+        <td style="padding:8px 12px;font-size:13px;color:#111827;font-weight:bold">${ctx.invoiceNumber}</td>
+      </tr>
+      <tr style="background:#ffffff">
+        <td style="padding:8px 12px;font-size:12px;font-weight:bold;color:#6b7280">Due Date</td>
+        <td style="padding:8px 12px;font-size:13px;color:#111827">${formatDate(ctx.dueDate)}</td>
+      </tr>
+      ${ctx.totalAmount && ctx.paidAmount && ctx.paidAmount > 0 ? `
+      <tr style="background:#f3f4f6">
+        <td style="padding:8px 12px;font-size:12px;font-weight:bold;color:#6b7280">Invoice Total</td>
+        <td style="padding:8px 12px;font-size:13px;color:#111827">${formatCurrency(ctx.totalAmount)}</td>
+      </tr>
+      <tr style="background:#ffffff">
+        <td style="padding:8px 12px;font-size:12px;font-weight:bold;color:#16a34a">Amount Received</td>
+        <td style="padding:8px 12px;font-size:13px;color:#16a34a">${formatCurrency(ctx.paidAmount)}</td>
+      </tr>
+      ` : ''}
+      <tr style="background:#fef2f2">
+        <td style="padding:10px 12px;font-size:13px;font-weight:bold;color:#dc2626">Amount Outstanding</td>
+        <td style="padding:10px 12px;font-size:16px;font-weight:bold;color:#dc2626">${formatCurrency(ctx.amount)}</td>
+      </tr>
+    </table>` : ''
 
-We request you to process the payment at the earliest to avoid any service disruption.
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,sans-serif">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px">
+    <tr><td align="center">
+      <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:8px;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.12);max-width:600px;width:100%">
+        <tr><td style="background:#2563eb;padding:20px 32px">
+          <span style="color:#ffffff;font-size:18px;font-weight:bold">SIRPL</span>
+          <span style="color:rgba(255,255,255,0.8);font-size:13px;margin-left:8px">Samwha India Refractories Pvt. Ltd.</span>
+        </td></tr>
+        <tr><td style="padding:32px 32px 16px;color:#374151;font-size:15px;line-height:1.8">
+          ${escaped}
+        </td></tr>
+        ${invoiceTable ? `<tr><td style="padding:0 32px 16px">${invoiceTable}</td></tr>` : ''}
+        <tr><td style="padding:16px 32px 24px;border-top:1px solid #e5e7eb;color:#9ca3af;font-size:12px;line-height:1.6">
+          <strong>SIRPL</strong> · Samwha India Refractories Pvt. Ltd.<br>
+          This is an automated reminder. Please do not reply to this email.
+        </td></tr>
+      </table>
+    </td></tr>
+  </table>
+</body>
+</html>`
+}
 
-*Payment can be made via:*
-• UPI / Bank Transfer
-• Cheque in favour of ${ctx.businessName}
+interface EmailAttachment {
+  name: string
+  base64: string
+}
 
-Please share the payment confirmation once done.
+export async function sendEmail(
+  to: string,
+  subject: string,
+  body: string,
+  type = 'friendly',
+  attachment?: EmailAttachment,
+  ctx?: ReminderContext
+): Promise<{ success: boolean; error?: string }> {
+  const { BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME, RESEND_API_KEY, EMAIL_FROM } = process.env
+  const html = buildEmailHtml(body, ctx)
+
+  // ── Brevo (primary) ───────────────────────────────────────────────────────
+  if (BREVO_API_KEY) {
+    try {
+      const payload: Record<string, unknown> = {
+        sender: {
+          name: BREVO_FROM_NAME || 'SIRPL',
+          email: BREVO_FROM_EMAIL || 'noreply@sirpl.in',
+        },
+        to: [{ email: to }],
+        subject,
+        textContent: body,
+        htmlContent: html,
+      }
+      if (attachment) {
+        payload.attachment = [{ content: attachment.base64, name: attachment.name }]
+      }
+      const res = await fetch('https://api.brevo.com/v3/smtp/email', {
+        method: 'POST',
+        headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        return { success: false, error: 'Brevo: ' + JSON.stringify(err) }
+      }
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: 'Brevo: ' + err.message }
+    }
+  }
+
+  // ── Resend (fallback) ─────────────────────────────────────────────────────
+  if (RESEND_API_KEY) {
+    try {
+      const payload: Record<string, unknown> = {
+        from: EMAIL_FROM || 'SIRPL <onboarding@resend.dev>',
+        to: [to],
+        subject,
+        text: body,
+        html,
+      }
+      if (attachment) {
+        payload.attachments = [{ filename: attachment.name, content: attachment.base64 }]
+      }
+      const res = await fetch('https://api.resend.com/emails', {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      if (!res.ok) {
+        const err = await res.json()
+        return { success: false, error: 'Resend: ' + JSON.stringify(err) }
+      }
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: 'Resend: ' + err.message }
+    }
+  }
+
+  // ── Mock ──────────────────────────────────────────────────────────────────
+  console.log(`[MOCK Email] To: ${to}\nSubject: ${subject}\n${body}`)
+  return { success: true }
+}
+
+// Always polite — no escalation
+export function getReminderType(_daysOverdue: number): string {
+  return 'friendly'
+}
+
+// ─── WhatsApp ─────────────────────────────────────────────────────────────────
+// Priority: Green API (free, scan QR) → Meta Cloud API (free 1k/month) → mock
+
+export function buildWhatsAppMessage(ctx: ReminderContext): string {
+  const amount = formatCurrency(ctx.amount)
+  const due = formatDate(ctx.dueDate)
+  const partial = ctx.paidAmount && ctx.paidAmount > 0
+    ? `\n✅ Amount Received: ${formatCurrency(ctx.paidAmount)}`
+    : ''
+
+  return `*SIRPL – Payment Reminder*
+
+Dear Sir/Ma'am,
+
+This is a friendly reminder for an outstanding payment:
+
+📄 *Invoice No:* ${ctx.invoiceNumber}
+📅 *Due Date:* ${due}${partial}
+💰 *Amount Outstanding:* ${amount}
+
+Kindly arrange the payment at your earliest convenience.
 
 Regards,
-${ctx.businessName}
-${ctx.businessPhone || ''}`
+*SIRPL Accounts Dept.*${ctx.businessPhone ? `\n📞 ${ctx.businessPhone}` : ''}${ctx.businessEmail ? `\n📧 ${ctx.businessEmail}` : ''}`
+}
 
-    case 'final_warning':
-      return `⚠️ *FINAL REMINDER*
+function formatWhatsAppTo(phone: string): string {
+  const digits = phone.replace(/\D/g, '')
+  if (digits.length === 12 && digits.startsWith('91')) return digits
+  if (digits.length === 10) return `91${digits}`
+  return `91${digits.slice(-10)}`
+}
 
-Dear ${ctx.clientName},
+// ── Green API (free — scan QR with your WhatsApp Business number) ─────────────
+// Setup: green-api.com → Register free → Create instance → Scan QR
+// Add to .env: GREEN_API_INSTANCE_ID and GREEN_API_TOKEN
+async function sendViaGreenAPI(
+  to: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  const { GREEN_API_INSTANCE_ID, GREEN_API_TOKEN } = process.env
+  if (!GREEN_API_INSTANCE_ID || !GREEN_API_TOKEN) return { success: false, error: 'not_configured' }
 
-Despite our earlier reminders, invoice *${ctx.invoiceNumber}* for *${amount}* (due ${due}) remains unpaid — now ${ctx.daysOverdue} days overdue.
+  const chatId = `${formatWhatsAppTo(to)}@c.us`
+  const url = `https://api.green-api.com/waInstance${GREEN_API_INSTANCE_ID}/sendMessage/${GREEN_API_TOKEN}`
 
-*This is our final reminder before we initiate legal recovery proceedings.*
-
-To avoid this, please make immediate payment and share the confirmation with us.
-
-Regards,
-${ctx.businessName}
-${ctx.businessPhone || ''}`
-
-    case 'legal':
-      return `📋 *LEGAL NOTICE INTIMATION*
-
-Dear ${ctx.clientName},
-
-We regret to inform you that as invoice *${ctx.invoiceNumber}* for *${amount}* remains unpaid for ${ctx.daysOverdue} days despite multiple reminders, we are proceeding with formal legal action under the MSME Development Act, 2006.
-
-A formal legal notice will be delivered to your registered address shortly. You may also be filed as a respondent in MSME Samadhaan.
-
-To settle this matter amicably, please make full payment within 48 hours.
-
-${ctx.businessName}
-${ctx.businessPhone || ''}`
-
-    default:
-      return `Reminder for invoice ${ctx.invoiceNumber}: ${amount} due on ${due}.`
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ chatId, message }),
+    })
+    const data = await res.json() as any
+    if (!res.ok || data.error) {
+      return { success: false, error: `GreenAPI: ${data.error || JSON.stringify(data)}` }
+    }
+    return { success: true }
+  } catch (err: any) {
+    return { success: false, error: `GreenAPI: ${err.message}` }
   }
 }
 
-export async function sendWhatsAppMessage(phone: string, message: string): Promise<{ success: boolean; error?: string }> {
-  const { WHATSAPP_ACCESS_TOKEN, WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_API_URL } = process.env
-
-  if (!WHATSAPP_ACCESS_TOKEN || !WHATSAPP_PHONE_NUMBER_ID) {
-    // Mock mode for development
-    console.log(`[MOCK WhatsApp] To: ${phone}\n${message}`)
-    return { success: true }
+// ── Meta Cloud API (free 1,000 conversations/month) ───────────────────────────
+// Setup: developers.facebook.com → Create app → WhatsApp → get Phone Number ID + Token
+// Add to .env: WHATSAPP_PHONE_NUMBER_ID and WHATSAPP_ACCESS_TOKEN
+async function sendViaMetaAPI(
+  to: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  const { WHATSAPP_PHONE_NUMBER_ID, WHATSAPP_ACCESS_TOKEN, WHATSAPP_API_URL } = process.env
+  if (!WHATSAPP_PHONE_NUMBER_ID || !WHATSAPP_ACCESS_TOKEN ||
+      WHATSAPP_PHONE_NUMBER_ID === 'your_phone_number_id') {
+    return { success: false, error: 'not_configured' }
   }
 
-  // Normalize phone number
-  const normalized = phone.replace(/\D/g, '')
-  const phoneWithCode = normalized.startsWith('91') ? normalized : `91${normalized}`
+  const apiUrl = WHATSAPP_API_URL || 'https://graph.facebook.com/v18.0'
+  const toNumber = formatWhatsAppTo(to)
 
   try {
-    const res = await fetch(`${WHATSAPP_API_URL}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
+    const res = await fetch(`${apiUrl}/${WHATSAPP_PHONE_NUMBER_ID}/messages`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${WHATSAPP_ACCESS_TOKEN}`,
@@ -102,66 +261,35 @@ export async function sendWhatsAppMessage(phone: string, message: string): Promi
       },
       body: JSON.stringify({
         messaging_product: 'whatsapp',
-        to: phoneWithCode,
+        to: toNumber,
         type: 'text',
-        text: { body: message },
+        text: { body: message, preview_url: false },
       }),
     })
-
-    if (!res.ok) {
-      const err = await res.json()
-      return { success: false, error: JSON.stringify(err) }
-    }
-
+    const data = await res.json() as any
+    if (!res.ok) return { success: false, error: `Meta: ${data?.error?.message || JSON.stringify(data)}` }
     return { success: true }
   } catch (err: any) {
-    return { success: false, error: err.message }
+    return { success: false, error: `Meta: ${err.message}` }
   }
 }
 
-export async function sendEmail(to: string, subject: string, body: string): Promise<{ success: boolean; error?: string }> {
-  const { RESEND_API_KEY, EMAIL_FROM } = process.env
+// ── Main sendWhatsApp — tries Green API first, then Meta, then mock ───────────
+export async function sendWhatsApp(
+  to: string,
+  message: string
+): Promise<{ success: boolean; error?: string }> {
+  // 1. Try Green API (free, no monthly cap)
+  const greenResult = await sendViaGreenAPI(to, message)
+  if (greenResult.success) return greenResult
+  if (greenResult.error !== 'not_configured') return greenResult
 
-  if (!RESEND_API_KEY) {
-    console.log(`[MOCK Email] To: ${to}\nSubject: ${subject}\n${body}`)
-    return { success: true }
-  }
+  // 2. Try Meta Cloud API (free 1,000/month)
+  const metaResult = await sendViaMetaAPI(to, message)
+  if (metaResult.success) return metaResult
+  if (metaResult.error !== 'not_configured') return metaResult
 
-  try {
-    const res = await fetch('https://api.resend.com/emails', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${RESEND_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        from: EMAIL_FROM || 'CollectEase <noreply@collectease.in>',
-        to: [to],
-        subject,
-        text: body,
-        html: `<div style="font-family:sans-serif;max-width:600px;margin:auto;padding:24px">
-          <pre style="white-space:pre-wrap;font-family:sans-serif">${body}</pre>
-          <hr style="margin:24px 0;border-color:#e5e7eb">
-          <p style="font-size:12px;color:#9ca3af">Powered by CollectEase · Automated Payment Collection for Indian MSMEs</p>
-        </div>`,
-      }),
-    })
-
-    if (!res.ok) {
-      const err = await res.json()
-      return { success: false, error: JSON.stringify(err) }
-    }
-
-    return { success: true }
-  } catch (err: any) {
-    return { success: false, error: err.message }
-  }
-}
-
-export function getReminderType(daysOverdue: number): string {
-  if (daysOverdue <= 0) return 'friendly' // Day 0 / sent
-  if (daysOverdue <= 7) return 'friendly'
-  if (daysOverdue <= 15) return 'firm'
-  if (daysOverdue <= 25) return 'final_warning'
-  return 'legal'
+  // 3. Mock — log to console (no keys configured yet)
+  console.log(`[MOCK WhatsApp] To: ${to}\n${message}`)
+  return { success: true }
 }

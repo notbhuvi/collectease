@@ -2,21 +2,22 @@ import type { Metadata, Viewport } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
 import { ToastContextProvider } from '@/components/ui/toast'
+import { ThemeProvider } from '@/components/theme-provider'
 
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'CollectEase – Payment Collection Automation',
-  description: 'Automate invoice reminders, track receivables, and recover payments faster. Built for Indian MSMEs.',
+  title: 'SIRPL – Payment Collection',
+  description: 'Invoice reminders and receivables tracking for Samwha India Refractories Pvt. Ltd.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'CollectEase',
+    title: 'SIRPL',
   },
   icons: {
-    icon: '/icon-192.png',
-    apple: '/apple-touch-icon.png',
+    icon: '/sirpl-logo.png',
+    apple: '/sirpl-logo.png',
   },
 }
 
@@ -33,9 +34,11 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
   return (
     <html lang="en" className="h-full">
       <body className={`${inter.className} h-full bg-gray-50 antialiased`}>
-        <ToastContextProvider>
-          {children}
-        </ToastContextProvider>
+        <ThemeProvider>
+          <ToastContextProvider>
+            {children}
+          </ToastContextProvider>
+        </ThemeProvider>
       </body>
     </html>
   )

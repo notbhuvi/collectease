@@ -37,7 +37,7 @@ export async function GET(request: Request) {
     return new NextResponse(csv, {
       headers: {
         'Content-Type': 'text/csv',
-        'Content-Disposition': `attachment; filename="collectease-report-${new Date().toISOString().split('T')[0]}.csv"`,
+        'Content-Disposition': `attachment; filename="sirpl-report-${new Date().toISOString().split('T')[0]}.csv"`,
       },
     })
   }
@@ -88,7 +88,7 @@ export async function GET(request: Request) {
     return new NextResponse(buf, {
       headers: {
         'Content-Type': 'application/pdf',
-        'Content-Disposition': `attachment; filename="collectease-report-${new Date().toISOString().split('T')[0]}.pdf"`,
+        'Content-Disposition': `attachment; filename="sirpl-report-${new Date().toISOString().split('T')[0]}.pdf"`,
       },
     })
   }

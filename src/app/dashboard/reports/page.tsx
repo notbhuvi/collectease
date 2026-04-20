@@ -4,8 +4,8 @@ import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatDate, getDaysOverdue } from '@/lib/utils'
-import { BarChart3, Download } from 'lucide-react'
 import { ReportExportButtons } from '@/components/reports/report-export-buttons'
+import { Clock } from 'lucide-react'
 
 export default async function ReportsPage() {
   const supabase = await createClient()
@@ -23,14 +23,46 @@ export default async function ReportsPage() {
   const [{ data: invoices }, { data: clients }, { data: payments }] = await Promise.all([
     supabase.from('invoices').select('*, client:clients(name)').eq('business_id', business.id),
     supabase.from('clients').select('*').eq('business_id', business.id),
-    supabase.from('payments').select('*, invoice:invoices(invoice_number, client:clients(name))').eq('business_id', business.id).order('payment_date', { ascending: false }),
+    supabase.from('payments')
+      .select('*, invoice:invoices(invoice_number, client:clients(name))')
+      .eq('business_id', business.id)
+      .order('payment_date', { ascending: false }),
   ])
 
   const allInvoices = invoices || []
+
+  // Remaining balance = total - already paid
+  function remaining(inv: { total_amount: number; paid_amount?: number | null }) {
+    return inv.total_amount - (inv.paid_amount || 0)
+  }
+
+  const today = new Date().toISOString().split('T')[0]
+
+  // Treat as overdue if DB says so OR if due_date has already passed (cron may not have run yet)
+  function isOverdue(inv: { status: string; due_date: string }) {
+    return inv.status !== 'paid' && inv.status !== 'cancelled' &&
+      (inv.status === 'overdue' || inv.due_date < today)
+  }
+
   const totalInvoiced = allInvoices.reduce((s, i) => s + i.total_amount, 0)
-  const totalCollected = allInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.paid_amount || i.total_amount), 0)
-  const totalOutstanding = allInvoices.filter(i => i.status !== 'paid' && i.status !== 'cancelled').reduce((s, i) => s + i.total_amount, 0)
-  const overdueAmount = allInvoices.filter(i => i.status === 'overdue').reduce((s, i) => s + i.total_amount, 0)
+
+  // Collected = sum of ALL payment records (captures every partial payment)
+  const totalCollected = (payments || []).reduce((s, p) => s + Number(p.amount), 0)
+
+  // Outstanding = sum of remaining balances (not full total_amount)
+  const totalOutstanding = allInvoices
+    .filter(i => i.status !== 'paid' && i.status !== 'cancelled')
+    .reduce((s, i) => s + remaining(i), 0)
+
+  // Overdue = remaining balance on invoices past due date
+  const overdueAmount = allInvoices
+    .filter(i => isOverdue(i))
+    .reduce((s, i) => s + remaining(i), 0)
+
+  // Collection efficiency categories
+  const partialInvoices = allInvoices.filter(
+    i => i.status !== 'paid' && i.status !== 'cancelled' && (i.paid_amount || 0) > 0
+  )
 
   const riskVariant: Record<string, 'success' | 'warning' | 'destructive'> = {
     good: 'success', moderate: 'warning', risky: 'destructive',
@@ -100,10 +132,31 @@ export default async function ReportsPage() {
           </CardHeader>
           <CardContent className="space-y-4">
             {[
-              { label: 'Paid on time', count: allInvoices.filter(i => i.status === 'paid' && i.paid_at && new Date(i.paid_at) <= new Date(i.due_date)).length },
-              { label: 'Paid late', count: allInvoices.filter(i => i.status === 'paid' && i.paid_at && new Date(i.paid_at) > new Date(i.due_date)).length },
-              { label: 'Currently overdue', count: allInvoices.filter(i => i.status === 'overdue').length },
-              { label: 'Pending (sent)', count: allInvoices.filter(i => i.status === 'sent').length },
+              {
+                label: 'Paid on time',
+                count: allInvoices.filter(i => i.status === 'paid' && i.paid_at && new Date(i.paid_at) <= new Date(i.due_date)).length,
+                color: 'bg-green-500',
+              },
+              {
+                label: 'Paid late',
+                count: allInvoices.filter(i => i.status === 'paid' && i.paid_at && new Date(i.paid_at) > new Date(i.due_date)).length,
+                color: 'bg-blue-400',
+              },
+              {
+                label: 'Partially paid',
+                count: partialInvoices.length,
+                color: 'bg-amber-400',
+              },
+              {
+                label: 'Currently overdue',
+                count: allInvoices.filter(i => isOverdue(i) && !(i.paid_amount > 0)).length,
+                color: 'bg-red-500',
+              },
+              {
+                label: 'Pending (sent)',
+                count: allInvoices.filter(i => i.status === 'sent' && !(i.paid_amount > 0)).length,
+                color: 'bg-gray-400',
+              },
             ].map(item => {
               const pct = allInvoices.length > 0 ? (item.count / allInvoices.length) * 100 : 0
               return (
@@ -113,7 +166,7 @@ export default async function ReportsPage() {
                     <span className="font-medium text-gray-900">{item.count} ({pct.toFixed(0)}%)</span>
                   </div>
                   <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full rounded-full bg-blue-500" style={{ width: `${pct}%` }} />
+                    <div className={`h-full rounded-full ${item.color}`} style={{ width: `${pct}%` }} />
                   </div>
                 </div>
               )
@@ -122,13 +175,55 @@ export default async function ReportsPage() {
         </Card>
       </div>
 
-      {/* Overdue aging table */}
+      {/* Partially paid invoices */}
+      {partialInvoices.length > 0 && (
+        <Card className="mb-6">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="h-4 w-4 text-amber-500" />
+              Partially Paid Invoices
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Invoice</th>
+                    <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Client</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Total</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Received</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Remaining</th>
+                    <th className="text-center text-xs font-medium text-gray-500 px-6 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-50">
+                  {partialInvoices.map(inv => (
+                    <tr key={inv.id} className="hover:bg-gray-50">
+                      <td className="px-6 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
+                      <td className="px-4 py-3 text-gray-700">{inv.client?.name || '–'}</td>
+                      <td className="px-4 py-3 text-right text-gray-500">{formatCurrency(inv.total_amount)}</td>
+                      <td className="px-4 py-3 text-right font-medium text-green-600">{formatCurrency(inv.paid_amount)}</td>
+                      <td className="px-4 py-3 text-right font-semibold text-amber-600">{formatCurrency(remaining(inv))}</td>
+                      <td className="px-6 py-3 text-center">
+                        <Badge variant="warning">partial</Badge>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Overdue aging table — shows remaining balance */}
       <Card className="mb-6">
         <CardHeader>
           <CardTitle>Overdue Aging Report</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          {allInvoices.filter(i => i.status === 'overdue').length === 0 ? (
+          {allInvoices.filter(i => isOverdue(i)).length === 0 ? (
             <p className="text-sm text-gray-400 text-center py-8">No overdue invoices</p>
           ) : (
             <div className="overflow-x-auto">
@@ -139,25 +234,36 @@ export default async function ReportsPage() {
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Client</th>
                     <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Due Date</th>
                     <th className="text-center text-xs font-medium text-gray-500 px-4 py-3">Days Overdue</th>
-                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Amount</th>
+                    <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Remaining</th>
                     <th className="text-center text-xs font-medium text-gray-500 px-6 py-3">Bucket</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-50">
                   {allInvoices
-                    .filter(i => i.status === 'overdue')
+                    .filter(i => isOverdue(i))
                     .sort((a, b) => getDaysOverdue(b.due_date) - getDaysOverdue(a.due_date))
                     .map(inv => {
                       const days = getDaysOverdue(inv.due_date)
                       const bucket = days <= 30 ? '0–30d' : days <= 60 ? '30–60d' : days <= 90 ? '60–90d' : '90d+'
                       const bucketColor = days <= 30 ? 'warning' : 'destructive'
+                      const bal = remaining(inv)
                       return (
                         <tr key={inv.id} className="hover:bg-gray-50">
-                          <td className="px-6 py-3 font-medium text-gray-900">{inv.invoice_number}</td>
+                          <td className="px-6 py-3 font-medium text-gray-900">
+                            {inv.invoice_number}
+                            {(inv.paid_amount || 0) > 0 && (
+                              <span className="ml-2 text-xs text-amber-600 font-normal">partial</span>
+                            )}
+                          </td>
                           <td className="px-4 py-3 text-gray-700">{inv.client?.name || '–'}</td>
                           <td className="px-4 py-3 text-gray-500">{formatDate(inv.due_date)}</td>
                           <td className="px-4 py-3 text-center font-semibold text-red-600">{days}</td>
-                          <td className="px-4 py-3 text-right font-semibold text-gray-900">{formatCurrency(inv.total_amount)}</td>
+                          <td className="px-4 py-3 text-right font-semibold text-gray-900">
+                            {formatCurrency(bal)}
+                            {(inv.paid_amount || 0) > 0 && (
+                              <p className="text-xs text-gray-400 font-normal">{formatCurrency(inv.paid_amount)} paid</p>
+                            )}
+                          </td>
                           <td className="px-6 py-3 text-center">
                             <Badge variant={bucketColor as any}>{bucket}</Badge>
                           </td>

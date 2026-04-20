@@ -1,14 +1,72 @@
 @import "tailwindcss";
 
+/* ── Light theme (default) ─────────────────────────────────────────────── */
 :root {
   --background: #f9fafb;
   --foreground: #111827;
+  --card: #ffffff;
+  --card-border: #e5e7eb;
+  --muted: #f3f4f6;
+  --muted-foreground: #6b7280;
+  --sidebar-bg: #1e293b;
+  --sidebar-text: #e2e8f0;
+  --sidebar-muted: #94a3b8;
+  --sidebar-active: #3b82f6;
+  --input-bg: #ffffff;
+  --input-border: #d1d5db;
+  --scrollbar-track: #f1f5f9;
+  --scrollbar-thumb: #cbd5e1;
   /* Safe area insets for iPhone notch / Dynamic Island */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
   --safe-left: env(safe-area-inset-left, 0px);
   --safe-right: env(safe-area-inset-right, 0px);
 }
+
+/* ── Dark theme ────────────────────────────────────────────────────────── */
+.dark {
+  --background: #0f172a;
+  --foreground: #f1f5f9;
+  --card: #1e293b;
+  --card-border: #334155;
+  --muted: #1e293b;
+  --muted-foreground: #94a3b8;
+  --sidebar-bg: #0f172a;
+  --sidebar-text: #e2e8f0;
+  --sidebar-muted: #64748b;
+  --sidebar-active: #3b82f6;
+  --input-bg: #1e293b;
+  --input-border: #475569;
+  --scrollbar-track: #1e293b;
+  --scrollbar-thumb: #475569;
+}
+
+/* ── Dark mode overrides for Tailwind utility classes ──────────────────── */
+.dark body                                        { background: var(--background); color: var(--foreground); }
+.dark .bg-white                                   { background-color: var(--card) !important; }
+.dark .bg-gray-50                                 { background-color: #1e293b !important; }
+.dark .bg-gray-100                                { background-color: #1e293b !important; }
+.dark .bg-gray-200                                { background-color: #334155 !important; }
+.dark .border-gray-100                            { border-color: #334155 !important; }
+.dark .border-gray-200                            { border-color: #334155 !important; }
+.dark .border-gray-300                            { border-color: #475569 !important; }
+.dark .divide-gray-50 > * + *                     { border-color: #334155 !important; }
+.dark .divide-gray-100 > * + *                    { border-color: #334155 !important; }
+.dark .text-gray-900                              { color: #f1f5f9 !important; }
+.dark .text-gray-800                              { color: #e2e8f0 !important; }
+.dark .text-gray-700                              { color: #cbd5e1 !important; }
+.dark .text-gray-600                              { color: #94a3b8 !important; }
+.dark .text-gray-500                              { color: #64748b !important; }
+.dark .text-gray-400                              { color: #475569 !important; }
+.dark .hover\:bg-gray-50:hover                    { background-color: #334155 !important; }
+.dark .hover\:bg-gray-100:hover                   { background-color: #334155 !important; }
+.dark .hover\:bg-gray-200:hover                   { background-color: #475569 !important; }
+.dark input, .dark select, .dark textarea         { background-color: var(--input-bg) !important; border-color: var(--input-border) !important; color: var(--foreground) !important; }
+.dark input::placeholder, .dark textarea::placeholder { color: #475569 !important; }
+.dark table thead tr                              { border-color: #334155 !important; }
+.dark .shadow-sm                                  { box-shadow: 0 1px 2px 0 rgba(0,0,0,0.4) !important; }
+.dark .shadow                                     { box-shadow: 0 1px 3px 0 rgba(0,0,0,0.5) !important; }
+.dark .ring-1                                     { --tw-ring-color: #334155 !important; }
 
 html, body {
   height: 100%;
