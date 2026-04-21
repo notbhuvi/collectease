@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { PortalSidebar } from '@/components/portal/portal-sidebar'
 import { getRoleHome, PORTAL_ROLES } from '@/lib/roles'
+import { getProfileForUser } from '@/lib/profile'
 import type { UserRole } from '@/types'
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -9,11 +10,8 @@ export default async function PortalLayout({ children }: { children: React.React
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('role, full_name, company_name')
-    .eq('id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'id,email,role,full_name,company_name')
 
   if (!profile || !PORTAL_ROLES.includes(profile.role as UserRole)) {
     redirect(profile ? getRoleHome(profile.role as UserRole) : '/auth/login')

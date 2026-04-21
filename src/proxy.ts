@@ -1,5 +1,7 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
+import { getProfileForUser } from '@/lib/profile'
+import { canAccessPath, getRoleHome } from '@/lib/roles'
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
@@ -33,6 +35,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
+  const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/')
   const protectedPrefixes = ['/dashboard', '/transport', '/portal', '/admin']
   const isProtected = protectedPrefixes.some(p => pathname.startsWith(p))
 
@@ -41,28 +44,20 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Redirect authenticated users away from auth pages → role-based home
-  if (user && pathname.startsWith('/auth/')) {
-    // Fetch role to redirect correctly
-    try {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('email', user.email)
-        .single()
+  if (!user) {
+    return response
+  }
 
-      const roleHome: Record<string, string> = {
-        admin: '/admin',
-        accounts: '/dashboard',
-        sales: '/dashboard',
-        transport_team: '/transport',
-        transporter: '/portal',
-      }
-      const dest = profile?.role ? (roleHome[profile.role] ?? '/dashboard') : '/dashboard'
-      return NextResponse.redirect(new URL(dest, request.url))
-    } catch {
-      return NextResponse.redirect(new URL('/dashboard', request.url))
-    }
+  const profile = await getProfileForUser(supabase, user, 'id,email,role')
+  const roleHome = getRoleHome(profile?.role, '/dashboard')
+
+  // Redirect authenticated users away from auth pages → role-based home
+  if (isAuthRoute) {
+    return NextResponse.redirect(new URL(roleHome, request.url))
+  }
+
+  if (isProtected && !canAccessPath(profile?.role, pathname)) {
+    return NextResponse.redirect(new URL(roleHome, request.url))
   }
 
   return response

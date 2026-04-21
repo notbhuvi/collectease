@@ -1,19 +1,19 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { AdminSidebar } from '@/components/admin/admin-sidebar'
-import type { UserRole } from '@/types'
+import { getProfileForUser } from '@/lib/profile'
+import { getRoleHome } from '@/lib/roles'
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'id,email,role,full_name')
 
   if (!profile || profile.role !== 'admin') {
-    redirect(profile ? `/` + (
-      { accounts: 'dashboard', transport_team: 'transport', transporter: 'portal' }[profile.role as string] ?? 'auth/login'
-    ) : '/auth/login')
+    redirect(getRoleHome(profile?.role, '/auth/login'))
   }
 
   return (

@@ -2,6 +2,7 @@ import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { Sidebar } from '@/components/layout/sidebar'
 import { getRoleHome, DASHBOARD_ROLES } from '@/lib/roles'
+import { getProfileForUser } from '@/lib/profile'
 import type { UserRole } from '@/types'
 
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -11,19 +12,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
 
   // Use service client for profile so RLS never blocks the role lookup
   const svc = await createServiceClient()
-  const { data: profile } = await svc
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single()
+  const profile = await getProfileForUser(svc, user, 'id,email,role')
 
   // Strict role guard — if no profile or wrong role, send them to their correct home
   if (!profile || !DASHBOARD_ROLES.includes(profile.role as UserRole)) {
-    const roleHome: Record<string, string> = {
-      admin: '/admin', accounts: '/dashboard',
-      transport_team: '/transport', transporter: '/portal',
-    }
-    redirect(profile ? (roleHome[profile.role] ?? '/auth/login') : '/auth/login')
+    redirect(getRoleHome(profile?.role, '/auth/login'))
   }
 
   // Fetch or auto-create business — only runs for accounts/admin users (role guard above)

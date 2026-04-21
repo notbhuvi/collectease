@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation'
 import { Mail, Lock } from 'lucide-react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
+import { getProfileForUser } from '@/lib/profile'
+import { getRoleHome } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -29,24 +31,20 @@ export default function LoginPage() {
       return
     }
 
-    if (authData.user) {
-      const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', authData.user.id)
-        .single()
-
-      const roleRedirects: Record<string, string> = {
-        admin: '/admin',
-        accounts: '/dashboard',
-        transport_team: '/transport',
-        transporter: '/portal',
-      }
-      const dest = profile?.role ? (roleRedirects[profile.role] ?? '/dashboard') : '/dashboard'
-      router.replace(dest)
-    } else {
-      router.replace('/dashboard')
+    if (!authData.user) {
+      setError('Unable to load your account after login')
+      setLoading(false)
+      return
     }
+
+    const profile = await getProfileForUser(
+      supabase,
+      authData.user,
+      'role,email,id'
+    )
+
+    const destination = getRoleHome(profile?.role, '/dashboard')
+    router.replace(destination)
   }
 
   return (

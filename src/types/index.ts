@@ -1,5 +1,5 @@
 // ── Role system ───────────────────────────────────────────────────────────────
-export type UserRole = 'admin' | 'accounts' | 'transport_team' | 'transporter'
+export type UserRole = 'admin' | 'accounts' | 'sales' | 'transport_team' | 'transporter'
 
 export interface Profile {
   id: string

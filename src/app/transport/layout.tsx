@@ -1,7 +1,8 @@
 import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { TransportSidebar } from '@/components/transport/transport-sidebar'
 import { getRoleHome, TRANSPORT_ROLES } from '@/lib/roles'
+import { getProfileForUser } from '@/lib/profile'
 import type { UserRole } from '@/types'
 
 export default async function TransportLayout({ children }: { children: React.ReactNode }) {
@@ -9,7 +10,8 @@ export default async function TransportLayout({ children }: { children: React.Re
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'id,email,role,full_name')
 
   if (!profile || !TRANSPORT_ROLES.includes(profile.role as UserRole)) {
     redirect(profile ? getRoleHome(profile.role as UserRole) : '/auth/login')
