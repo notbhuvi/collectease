@@ -9,6 +9,7 @@ import { AwardBidButton } from '@/components/transport/award-bid-button'
 import { CloseLoadButton } from '@/components/transport/close-load-button'
 import { DeleteBidButton } from '@/components/transport/delete-bid-button'
 import { EditBidButton } from '@/components/transport/edit-bid-button'
+import { DeleteLoadButton } from '@/components/transport/delete-load-button'
 import { MapPin, Package, Truck, Calendar, Clock, IndianRupee, Medal } from 'lucide-react'
 
 export default async function LoadDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -17,27 +18,34 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Use service client to bypass RLS for transport team / admin
   const serviceClient = await createServiceClient()
 
-  const { data: load } = await serviceClient
+  // Fetch load and bids separately to avoid nested join issues
+  const { data: load, error: loadError } = await serviceClient
     .from('transport_loads')
-    .select(`
-      *,
-      creator:profiles!created_by(full_name, email),
-      awarded:awarded_loads(
-        id, final_amount, transporter_id, awarded_at,
-        transporter:profiles!transporter_id(full_name, company_name)
-      )
-    `)
+    .select('*')
     .eq('id', id)
     .single()
 
-  if (!load) notFound()
+  if (loadError || !load) notFound()
+
+  // Fetch awarded info separately
+  const { data: awardedRaw } = await serviceClient
+    .from('awarded_loads')
+    .select('id, final_amount, transporter_id, awarded_at, transporter:profiles!transporter_id(full_name, company_name)')
+    .eq('load_id', id)
+    .maybeSingle()
+
+  // Fetch creator profile separately
+  const { data: creator } = await serviceClient
+    .from('profiles')
+    .select('full_name, email')
+    .eq('id', load.created_by)
+    .maybeSingle()
 
   const { data: bids } = await serviceClient
     .from('transport_bids')
-    .select(`*, transporter:profiles!transporter_id(full_name, company_name, email)`)
+    .select('*, transporter:profiles!transporter_id(full_name, company_name, email)')
     .eq('load_id', id)
     .order('bid_amount', { ascending: true })
 
@@ -46,7 +54,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const deadlinePassed = new Date(load.bidding_deadline) < new Date()
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
-  const awardedData = Array.isArray(load.awarded) ? load.awarded[0] : load.awarded
+  const awardedData = awardedRaw as any
 
   const statusVariant: Record<string, any> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
@@ -63,10 +71,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     <div>
       <PageHeader
         title={`${load.pickup_location} → ${load.drop_location}`}
-        description={`Load ID: ${load.id.slice(0, 8).toUpperCase()} · Created by ${(load.creator as any)?.full_name || (load.creator as any)?.email}`}
+        description={`Load ID: ${load.id.slice(0, 8).toUpperCase()} · Created by ${creator?.full_name || creator?.email || 'Unknown'}`}
         actions={
           <div className="flex gap-2">
             {isOpen && <CloseLoadButton loadId={load.id} />}
+            <DeleteLoadButton loadId={load.id} />
           </div>
         }
       />
@@ -118,10 +127,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       🏆 Awarded To
                     </p>
                     <p className="text-lg font-bold text-green-900">
-                      {(awardedData as any).transporter?.company_name || (awardedData as any).transporter?.full_name}
+                      {awardedData.transporter?.company_name || awardedData.transporter?.full_name}
                     </p>
                     <p className="text-sm text-green-700">
-                      Final amount: {formatCurrency((awardedData as any).final_amount)}
+                      Final amount: {formatCurrency(awardedData.final_amount)}
                     </p>
                   </div>
                 </div>
@@ -211,22 +220,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                                       currentRemarks={bid.remarks || ''}
                                       transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
                                     />
-                                    {!isLowest && (
-                                      <AwardBidButton
-                                        loadId={load.id}
-                                        transporterId={bid.transporter_id}
-                                        bidAmount={bid.bid_amount}
-                                        transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
-                                      />
-                                    )}
-                                    {isLowest && (
-                                      <AwardBidButton
-                                        loadId={load.id}
-                                        transporterId={bid.transporter_id}
-                                        bidAmount={bid.bid_amount}
-                                        transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
-                                      />
-                                    )}
+                                    <AwardBidButton
+                                      loadId={load.id}
+                                      transporterId={bid.transporter_id}
+                                      bidAmount={bid.bid_amount}
+                                      transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                    />
                                   </>
                                 )}
                                 <DeleteBidButton bidId={bid.id} transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'} />
