@@ -29,12 +29,19 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
   if (loadError || !load) notFound()
 
-  // Fetch awarded info separately
+  // Fetch awarded info separately (no join — fetch profile separately)
   const { data: awardedRaw } = await serviceClient
     .from('awarded_loads')
-    .select('id, final_amount, transporter_id, awarded_at, transporter:profiles!transporter_id(full_name, company_name)')
+    .select('id, final_amount, transporter_id, awarded_at')
     .eq('load_id', id)
     .maybeSingle()
+
+  // Fetch awarded transporter profile if exists
+  const { data: awardedTransporter } = awardedRaw?.transporter_id
+    ? await serviceClient.from('profiles').select('full_name, company_name').eq('id', awardedRaw.transporter_id).single()
+    : { data: null }
+
+  const awardedData = awardedRaw ? { ...awardedRaw, transporter: awardedTransporter } : null
 
   // Fetch creator profile separately
   const { data: creator } = await serviceClient
@@ -43,18 +50,31 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     .eq('id', load.created_by)
     .maybeSingle()
 
-  const { data: bids } = await serviceClient
+  // Fetch bids plain — no join (join on profiles!transporter_id fails silently)
+  const { data: rawBids } = await serviceClient
     .from('transport_bids')
-    .select('*, transporter:profiles!transporter_id(full_name, company_name, email)')
+    .select('*')
     .eq('load_id', id)
     .order('bid_amount', { ascending: true })
 
-  const allBids = bids || []
+  // Batch-fetch all transporter profiles in one query
+  const bidList = rawBids || []
+  const transporterIds = [...new Set(bidList.map(b => b.transporter_id))]
+  const { data: transporterProfiles } = transporterIds.length > 0
+    ? await serviceClient.from('profiles').select('id, full_name, company_name, email').in('id', transporterIds)
+    : { data: [] }
+
+  const profileMap = new Map((transporterProfiles || []).map(p => [p.id, p]))
+
+  // Merge profiles into bids
+  const allBids = bidList.map(b => ({
+    ...b,
+    transporter: profileMap.get(b.transporter_id) ?? null,
+  }))
   const lowestBid = allBids[0]
   const deadlinePassed = new Date(load.bidding_deadline) < new Date()
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
-  const awardedData = awardedRaw as any
 
   const statusVariant: Record<string, any> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
