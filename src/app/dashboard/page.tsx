@@ -23,7 +23,18 @@ export default async function DashboardPage() {
     .eq('user_id', user.id)
     .single()
 
-  if (!business) redirect('/auth/register')
+  // No business yet — show empty dashboard (don't redirect, prevents loops for admin/accounts)
+  if (!business) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-[60vh] text-center px-6">
+        <FileText className="h-14 w-14 text-gray-200 mb-4" />
+        <h2 className="text-lg font-semibold text-gray-700 mb-2">No Business Profile Set Up</h2>
+        <p className="text-sm text-gray-400 max-w-sm">
+          Your account doesn&apos;t have a business profile linked yet. Please contact your administrator to set up invoicing.
+        </p>
+      </div>
+    )
+  }
 
   const bid = business.id
 

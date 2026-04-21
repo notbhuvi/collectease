@@ -16,7 +16,7 @@ export const ROLE_LABELS: Record<UserRole, string> = {
   transporter: 'Transporter',
 }
 
-export const DASHBOARD_ROLES: UserRole[] = ['admin', 'accounts', 'sales']
+export const DASHBOARD_ROLES: UserRole[] = ['admin', 'accounts']
 export const TRANSPORT_ROLES: UserRole[] = ['admin', 'transport_team']
 export const PORTAL_ROLES: UserRole[] = ['admin', 'transporter']
 export const ADMIN_ROLES: UserRole[] = ['admin']

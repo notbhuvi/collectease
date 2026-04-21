@@ -10,11 +10,11 @@ import { UserPlus, Eye, EyeOff, CheckCircle } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { UserRole } from '@/types'
 
-const creatableRoles: UserRole[] = ['accounts', 'sales', 'transport_team', 'transporter']
+const creatableRoles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter']
 
 const roleColors: Record<string, string> = {
+  admin: 'border-violet-300 bg-violet-50 text-violet-700',
   accounts: 'border-blue-300 bg-blue-50 text-blue-700',
-  sales: 'border-cyan-300 bg-cyan-50 text-cyan-700',
   transport_team: 'border-orange-300 bg-orange-50 text-orange-700',
   transporter: 'border-emerald-300 bg-emerald-50 text-emerald-700',
 }

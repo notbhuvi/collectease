@@ -21,35 +21,32 @@ export default function LoginPage() {
     setLoading(true)
 
     const supabase = createClient()
-    const { data: authData, error } = await supabase.auth.signInWithPassword({ email, password })
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
-    if (error) {
+    if (authError) {
       setError('Invalid email or password')
       setLoading(false)
       return
     }
 
-    // Fetch role and redirect accordingly
     if (authData.user) {
       const { data: profile } = await supabase
-  .from('profiles')
-  .select('role')
-  .eq('email', authData.user.email)
-  .single()
+        .from('profiles')
+        .select('role')
+        .eq('id', authData.user.id)
+        .single()
 
       const roleRedirects: Record<string, string> = {
         admin: '/admin',
         accounts: '/dashboard',
-        sales: '/dashboard',
         transport_team: '/transport',
         transporter: '/portal',
       }
       const dest = profile?.role ? (roleRedirects[profile.role] ?? '/dashboard') : '/dashboard'
-      router.push(dest)
+      router.replace(dest)
     } else {
-      router.push('/dashboard')
+      router.replace('/dashboard')
     }
-    router.refresh()
   }
 
   return (
@@ -73,14 +70,14 @@ export default function LoginPage() {
         <div className="bg-white rounded-2xl shadow-xl border border-gray-100 p-8">
           <div className="mb-6">
             <h1 className="text-2xl font-bold text-gray-900">Welcome back</h1>
-            <p className="text-sm text-gray-500 mt-1">Sign in to manage your receivables</p>
+            <p className="text-sm text-gray-500 mt-1">Sign in to your SIRPL account</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-4">
             <Input
               label="Email address"
               type="email"
-              placeholder="you@company.com"
+              placeholder="you@sirpl.in"
               value={email}
               onChange={e => setEmail(e.target.value)}
               leftIcon={<Mail className="h-4 w-4" />}

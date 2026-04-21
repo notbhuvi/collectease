@@ -73,8 +73,8 @@ export default async function AdminPage() {
   const openLoads = allLoads.filter(l => l.status === 'open').length
   const awardedLoads = allLoads.filter(l => l.status === 'awarded').length
   const completedLoads = allLoads.filter(l => l.status === 'completed').length
-  const avgBid = allBids.length > 0
-    ? allBids.reduce((s, b) => s + (b.bid_amount || 0), 0) / allBids.length
+  const lowestBid = allBids.length > 0
+    ? Math.min(...allBids.map(b => b.bid_amount || 0))
     : 0
   const avgAward = allAwards.length > 0
     ? allAwards.reduce((s, a) => s + (a.final_amount || 0), 0) / allAwards.length
@@ -89,12 +89,11 @@ export default async function AdminPage() {
   const roleColors: Record<string, string> = {
     admin: 'bg-violet-100 text-violet-700',
     accounts: 'bg-blue-100 text-blue-700',
-    sales: 'bg-cyan-100 text-cyan-700',
     transport_team: 'bg-orange-100 text-orange-700',
     transporter: 'bg-emerald-100 text-emerald-700',
   }
   const roleLabels: Record<string, string> = {
-    admin: 'Admin', accounts: 'Accounts', sales: 'Sales',
+    admin: 'Admin', accounts: 'Accounts',
     transport_team: 'Transport Team', transporter: 'Transporter',
   }
 
@@ -140,8 +139,8 @@ export default async function AdminPage() {
         </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
           <Card className="p-4">
-            <p className="text-xs font-medium text-gray-500 mb-1">Avg Bid Amount</p>
-            <p className="text-xl font-bold text-blue-700">{avgBid > 0 ? fmtAmount(avgBid) : '—'}</p>
+            <p className="text-xs font-medium text-gray-500 mb-1">Lowest Bid</p>
+            <p className="text-xl font-bold text-blue-700">{lowestBid > 0 ? fmtAmount(lowestBid) : '—'}</p>
             <p className="text-xs text-gray-400 mt-0.5">across {allBids.length} bids</p>
           </Card>
           <Card className="p-4">
@@ -176,7 +175,7 @@ export default async function AdminPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-sm">Users by Role</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-2">
-              {['admin', 'accounts', 'sales', 'transport_team', 'transporter'].map(role => {
+              {['admin', 'accounts', 'transport_team', 'transporter'].map(role => {
                 const count = roleCounts[role] || 0
                 return (
                   <div key={role} className="flex items-center justify-between">
