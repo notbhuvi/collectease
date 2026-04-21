@@ -10,7 +10,11 @@ export default async function AdminLayout({ children }: { children: React.ReactN
 
   const { data: profile } = await supabase.from('profiles').select('role, full_name').eq('id', user.id).single()
 
-  if (!profile || profile.role !== 'admin') redirect('/dashboard')
+  if (!profile || profile.role !== 'admin') {
+    redirect(profile ? `/` + (
+      { accounts: 'dashboard', transport_team: 'transport', transporter: 'portal' }[profile.role as string] ?? 'auth/login'
+    ) : '/auth/login')
+  }
 
   return (
     <div className="flex h-full min-h-screen bg-gray-50">

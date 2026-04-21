@@ -1,4 +1,4 @@
-import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { createClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -27,23 +27,19 @@ export default async function PortalPage() {
   const myBidMap = new Map((myBids || []).map(b => [b.load_id, b]))
   const openLoads = loads || []
 
-  // Fetch lowest bid per load using service client (bypasses RLS — we only show the amount, not who)
-  let lowestBidMap = new Map<string, number>()
+  // Fetch all bid amounts on open loads — RLS policy "transporter_view_open_load_bids"
+  // allows transporters to read all bid amounts on open loads (amounts only, not who bid).
+  const lowestBidMap = new Map<string, number>()
   if (openLoads.length > 0) {
-    const serviceClient = await createServiceClient()
-    const { data: bidsSummary } = await serviceClient
+    const { data: allBids } = await supabase
       .from('transport_bids')
       .select('load_id, bid_amount')
       .in('load_id', openLoads.map(l => l.id))
 
-    if (bidsSummary) {
-      const grouped = bidsSummary.reduce((acc: Record<string, number[]>, b) => {
-        if (!acc[b.load_id]) acc[b.load_id] = []
-        acc[b.load_id].push(b.bid_amount)
-        return acc
-      }, {})
-      for (const [loadId, amounts] of Object.entries(grouped)) {
-        lowestBidMap.set(loadId, Math.min(...amounts))
+    for (const bid of allBids || []) {
+      const current = lowestBidMap.get(bid.load_id)
+      if (current === undefined || bid.bid_amount < current) {
+        lowestBidMap.set(bid.load_id, bid.bid_amount)
       }
     }
   }

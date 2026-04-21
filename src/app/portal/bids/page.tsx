@@ -11,40 +11,60 @@ export default async function MyBidsPage() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: bids } = await supabase
+  // Fetch bids plain — no nested joins (they fail silently in Supabase PostgREST)
+  const { data: rawBids } = await supabase
     .from('transport_bids')
-    .select(`
-      *,
-      load:transport_loads(pickup_location, drop_location, material, vehicle_type, pickup_date, bidding_deadline, status,
-        awarded:awarded_loads(transporter_id, final_amount))
-    `)
+    .select('*')
     .eq('transporter_id', user.id)
     .order('created_at', { ascending: false })
 
-  const allBids = bids || []
+  const rawBidList = rawBids || []
+
+  // Batch-fetch the loads for these bids
+  const loadIds = [...new Set(rawBidList.map(b => b.load_id).filter(Boolean))]
+  const { data: loadRows } = loadIds.length > 0
+    ? await supabase.from('transport_loads')
+        .select('id, pickup_location, drop_location, material, vehicle_type, pickup_date, bidding_deadline, status')
+        .in('id', loadIds)
+    : { data: [] }
+
+  const loadMap = new Map((loadRows || []).map(l => [l.id, l]))
+
+  // Fetch awarded info for these loads
+  const { data: awardedRows } = loadIds.length > 0
+    ? await supabase.from('awarded_loads')
+        .select('load_id, transporter_id, final_amount')
+        .in('load_id', loadIds)
+    : { data: [] }
+
+  const awardedMap = new Map((awardedRows || []).map(a => [a.load_id, a]))
+
+  // Merge everything
+  const allBids = rawBidList.map(b => ({
+    ...b,
+    load: loadMap.get(b.load_id)
+      ? { ...loadMap.get(b.load_id)!, awarded: awardedMap.get(b.load_id) ?? null }
+      : null,
+  }))
 
   function getBidStatus(bid: any) {
     const load = bid.load
     if (!load) return { label: 'Unknown', variant: 'secondary' as const }
     if (load.status === 'open') return { label: 'Bidding Open', variant: 'success' as const }
     if (load.status === 'awarded') {
-      const awarded = load.awarded?.[0] || load.awarded
-      if (awarded?.transporter_id === user!.id) return { label: '🏆 Won', variant: 'success' as const }
+      if (load.awarded?.transporter_id === user!.id) return { label: '🏆 Won', variant: 'success' as const }
       return { label: 'Not Selected', variant: 'secondary' as const }
     }
     if (load.status === 'completed') {
-      const awarded = load.awarded?.[0] || load.awarded
-      if (awarded?.transporter_id === user!.id) return { label: 'Completed', variant: 'default' as const }
+      if (load.awarded?.transporter_id === user!.id) return { label: 'Completed', variant: 'default' as const }
       return { label: 'Not Selected', variant: 'secondary' as const }
     }
     return { label: load.status, variant: 'secondary' as const }
   }
 
-  const won = allBids.filter(b => {
-    const load = b.load
-    const awarded = load?.awarded?.[0] || load?.awarded
-    return load?.status === 'awarded' && awarded?.transporter_id === user.id
-  })
+  const won = allBids.filter(b =>
+    b.load?.status === 'awarded' && b.load?.awarded?.transporter_id === user.id
+  )
 
   return (
     <div>

@@ -10,8 +10,14 @@ CREATE POLICY "team_admin_all_bids" ON transport_bids
     EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role IN ('admin', 'transport_team'))
   );
 
--- 2. Allow transporter to see aggregate lowest bid (read-only, no names)
---    Handled server-side via serviceClient — no policy change needed.
+-- 2. Allow transporter to see ALL bid amounts on open loads (to show lowest competitor bid)
+--    This does NOT expose who placed the bid — only the amount is used in the UI.
+DROP POLICY IF EXISTS "transporter_view_open_load_bids" ON transport_bids;
+CREATE POLICY "transporter_view_open_load_bids" ON transport_bids
+  FOR SELECT USING (
+    EXISTS (SELECT 1 FROM profiles WHERE id = auth.uid() AND role = 'transporter')
+    AND EXISTS (SELECT 1 FROM transport_loads WHERE id = load_id AND status = 'open')
+  );
 
 -- 3. Email logs table for tracking sent notifications
 CREATE TABLE IF NOT EXISTS email_logs (

@@ -13,12 +13,32 @@ export default async function AllLoadsPage() {
   if (!user) redirect('/auth/login')
 
   const serviceClient = await createServiceClient()
+
+  // Fetch loads plain (no nested joins — profiles!transporter_id fails silently)
   const { data: loads } = await serviceClient
     .from('transport_loads')
-    .select(`*, awarded:awarded_loads(id, final_amount, transporter:profiles!transporter_id(full_name, company_name))`)
+    .select('*')
     .order('created_at', { ascending: false })
 
   const allLoads = loads || []
+
+  // Fetch awarded info for awarded loads separately
+  const awardedLoadIds = allLoads.filter(l => l.status === 'awarded').map(l => l.id)
+  const { data: awardedRows } = awardedLoadIds.length > 0
+    ? await serviceClient.from('awarded_loads').select('load_id, final_amount, transporter_id').in('load_id', awardedLoadIds)
+    : { data: [] }
+
+  // Batch-fetch transporter profiles for awarded loads
+  const awardedTransporterIds = [...new Set((awardedRows || []).map(a => a.transporter_id).filter(Boolean))]
+  const { data: awardedProfiles } = awardedTransporterIds.length > 0
+    ? await serviceClient.from('profiles').select('id, full_name, company_name').in('id', awardedTransporterIds)
+    : { data: [] }
+
+  const profileMap = new Map((awardedProfiles || []).map(p => [p.id, p]))
+  const awardedMap = new Map((awardedRows || []).map(a => [a.load_id, {
+    ...a,
+    transporter: profileMap.get(a.transporter_id) ?? null,
+  }]))
 
   const statusVariant: Record<string, any> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
@@ -77,7 +97,7 @@ export default async function AllLoadsPage() {
                       </thead>
                       <tbody className="divide-y divide-gray-50">
                         {group.map(load => {
-                          const awarded = Array.isArray(load.awarded) ? load.awarded[0] : load.awarded
+                          const awarded = awardedMap.get(load.id)
                           return (
                             <tr key={load.id} className="hover:bg-gray-50 transition-colors">
                               <td className="px-6 py-3">
@@ -99,7 +119,7 @@ export default async function AllLoadsPage() {
                               </td>
                               {status === 'awarded' && (
                                 <td className="px-4 py-3 text-gray-700">
-                                  {(awarded as any)?.transporter?.company_name || (awarded as any)?.transporter?.full_name || '—'}
+                                  {awarded?.transporter?.company_name || awarded?.transporter?.full_name || awarded?.transporter_id?.slice(0, 8) || '—'}
                                 </td>
                               )}
                               <td className="px-6 py-3 text-right">

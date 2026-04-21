@@ -17,7 +17,7 @@ export default async function TransportDashboard() {
   const serviceClient = await createServiceClient()
   const { data: loads } = await serviceClient
     .from('transport_loads')
-    .select(`*, awarded:awarded_loads(id, final_amount)`)
+    .select('*')
     .order('created_at', { ascending: false })
 
   const allLoads = loads || []

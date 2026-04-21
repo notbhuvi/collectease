@@ -58,13 +58,31 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     .order('bid_amount', { ascending: true })
 
   // Batch-fetch all transporter profiles in one query
+  // Uses supabase (user-auth client) — "team_admin_read_profiles" RLS policy grants access.
+  // Falls back to serviceClient if the regular client returns nothing.
   const bidList = rawBids || []
-  const transporterIds = [...new Set(bidList.map(b => b.transporter_id))]
-  const { data: transporterProfiles } = transporterIds.length > 0
-    ? await serviceClient.from('profiles').select('id, full_name, company_name, email').in('id', transporterIds)
-    : { data: [] }
+  const transporterIds = [...new Set(bidList.map(b => b.transporter_id).filter(Boolean))]
 
-  const profileMap = new Map((transporterProfiles || []).map(p => [p.id, p]))
+  let transporterProfiles: any[] = []
+  if (transporterIds.length > 0) {
+    const { data: regularProfiles } = await supabase
+      .from('profiles')
+      .select('id, full_name, company_name, email')
+      .in('id', transporterIds)
+
+    if (regularProfiles && regularProfiles.length > 0) {
+      transporterProfiles = regularProfiles
+    } else {
+      // Fallback: service client (bypasses RLS entirely)
+      const { data: svcProfiles } = await serviceClient
+        .from('profiles')
+        .select('id, full_name, company_name, email')
+        .in('id', transporterIds)
+      transporterProfiles = svcProfiles || []
+    }
+  }
+
+  const profileMap = new Map(transporterProfiles.map((p: any) => [p.id, p]))
 
   // Merge profiles into bids
   const allBids = bidList.map(b => ({
@@ -212,9 +230,11 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                                 )}
                                 <div>
                                   <p className="font-medium text-gray-900">
-                                    {transporter?.company_name || transporter?.full_name || '—'}
+                                    {transporter?.company_name || transporter?.full_name || transporter?.email || bid.transporter_id?.slice(0, 8).toUpperCase() || '—'}
                                   </p>
-                                  <p className="text-xs text-gray-400">{transporter?.email}</p>
+                                  {transporter?.email && (transporter?.company_name || transporter?.full_name) && (
+                                    <p className="text-xs text-gray-400">{transporter.email}</p>
+                                  )}
                                 </div>
                               </div>
                             </td>
