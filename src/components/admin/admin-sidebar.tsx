@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { ShieldCheck, Users, LayoutDashboard, LogOut, Menu, X } from 'lucide-react'
-import Image from 'next/image'
+import { ShieldCheck, Users, LayoutDashboard, LogOut, Menu, X, UserPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
@@ -11,8 +10,7 @@ import { useState } from 'react'
 const navItems = [
   { href: '/admin', label: 'Overview', icon: LayoutDashboard },
   { href: '/admin/users', label: 'Users & Roles', icon: Users },
-  { href: '/dashboard', label: '→ Invoice Dashboard', icon: LayoutDashboard },
-  { href: '/transport', label: '→ Transport', icon: LayoutDashboard },
+  { href: '/admin/create-user', label: 'Create User', icon: UserPlus },
 ]
 
 export function AdminSidebar({ userName }: { userName?: string }) {
@@ -40,7 +38,7 @@ export function AdminSidebar({ userName }: { userName?: string }) {
 
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         {navItems.map(({ href, label, icon: Icon }) => {
-          const active = pathname === href
+          const active = pathname === href || (href !== '/admin' && pathname.startsWith(href))
           return (
             <Link key={href} href={href} onClick={() => setMobileOpen(false)}
               className={cn(
@@ -53,6 +51,21 @@ export function AdminSidebar({ userName }: { userName?: string }) {
             </Link>
           )
         })}
+
+        {/* Cross-module links */}
+        <div className="pt-2 mt-2 border-t border-gray-100">
+          <p className="px-3 pb-1 text-xs font-medium text-gray-400 uppercase tracking-wider">Modules</p>
+          {[
+            { href: '/dashboard', label: 'Invoice Dashboard' },
+            { href: '/transport', label: 'Transport' },
+          ].map(({ href, label }) => (
+            <Link key={href} href={href} onClick={() => setMobileOpen(false)}
+              className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors">
+              <span className="text-gray-300">→</span>
+              {label}
+            </Link>
+          ))}
+        </div>
       </nav>
 
       <div className="px-3 py-4 border-t border-gray-100">

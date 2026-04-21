@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { sendEmail, buildNewLoadEmail } from '@/lib/messaging'
 
 async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
   const { data } = await supabase.from('profiles').select('role').eq('id', userId).single()
@@ -49,10 +50,55 @@ export async function POST(request: Request) {
   const serviceClient = await createServiceClient()
   const { data, error } = await serviceClient
     .from('transport_loads')
-    .insert({ created_by: user.id, pickup_location, drop_location, material, weight, vehicle_type, pickup_date, bidding_deadline, notes, status: 'open' })
+    .insert({
+      created_by: user.id,
+      pickup_location,
+      drop_location,
+      material,
+      weight,
+      vehicle_type,
+      pickup_date,
+      bidding_deadline,
+      notes,
+      status: 'open',
+    })
     .select()
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+
+  // Notify all transporters via email (fire-and-forget)
+  try {
+    const { data: transporters } = await serviceClient
+      .from('profiles')
+      .select('email')
+      .eq('role', 'transporter')
+      .not('email', 'is', null)
+
+    if (transporters && transporters.length > 0) {
+      const loadIdShort = data.id.slice(0, 8).toUpperCase()
+      const subject = `📦 New Load Available — ${pickup_location} → ${drop_location}`
+      const emailBody = buildNewLoadEmail({
+        loadId: loadIdShort,
+        pickup: pickup_location,
+        drop: drop_location,
+        material,
+        weight,
+        vehicleType: vehicle_type,
+        pickupDate: pickup_date,
+        biddingDeadline: bidding_deadline,
+      })
+
+      // Send to each transporter (fire-and-forget)
+      for (const t of transporters) {
+        if (t.email) {
+          sendEmail(t.email, subject, emailBody).catch(console.error)
+        }
+      }
+    }
+  } catch (emailErr) {
+    console.error('Transporter notification failed:', emailErr)
+  }
+
   return NextResponse.json({ load: data }, { status: 201 })
 }

@@ -174,6 +174,90 @@ export function getReminderType(_daysOverdue: number): string {
   return 'friendly'
 }
 
+// ─── Transport Email Templates ────────────────────────────────────────────────
+
+interface NewLoadEmailCtx {
+  loadId: string
+  pickup: string
+  drop: string
+  material: string
+  weight: string
+  vehicleType: string
+  pickupDate: string
+  biddingDeadline: string
+}
+
+export function buildNewLoadEmail(ctx: NewLoadEmailCtx): string {
+  const deadline = new Date(ctx.biddingDeadline).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+  const pickup = new Date(ctx.pickupDate).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+
+  return `Dear Transporter,
+
+A new freight load is now available for bidding on the SIRPL Transport Portal.
+
+Load Details:
+━━━━━━━━━━━━━━━━━━━━━━
+Load ID:         ${ctx.loadId}
+Route:           ${ctx.pickup} → ${ctx.drop}
+Material:        ${ctx.material}
+Weight:          ${ctx.weight}
+Vehicle Type:    ${ctx.vehicleType}
+Pickup Date:     ${pickup}
+Bid Deadline:    ${deadline}
+━━━━━━━━━━━━━━━━━━━━━━
+
+Please log in to the SIRPL Transporter Portal to submit your bid before the deadline.
+
+Note: Bids submitted after the deadline will not be accepted.
+
+Regards,
+SIRPL Transport Department
+Samwha India Refractories Pvt. Ltd.`
+}
+
+interface WinnerEmailCtx {
+  transporterName: string
+  loadId: string
+  pickup: string
+  drop: string
+  material: string
+  finalAmount: number
+  pickupDate: string
+}
+
+export function buildTransportWinnerEmail(ctx: WinnerEmailCtx): string {
+  const pickup = new Date(ctx.pickupDate).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+  const amount = `Rs. ${ctx.finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
+
+  return `Dear ${ctx.transporterName},
+
+Congratulations! Your bid has been selected for the following freight load.
+
+Award Confirmation:
+━━━━━━━━━━━━━━━━━━━━━━
+Load ID:         ${ctx.loadId}
+Route:           ${ctx.pickup} → ${ctx.drop}
+Material:        ${ctx.material}
+Pickup Date:     ${pickup}
+Awarded Amount:  ${amount}
+━━━━━━━━━━━━━━━━━━━━━━
+
+Please find the official award confirmation attached as a PDF.
+Our team will contact you shortly with further instructions.
+
+Thank you for your bid and we look forward to working with you.
+
+Regards,
+SIRPL Transport Department
+Samwha India Refractories Pvt. Ltd.`
+}
+
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────
 // Priority: Green API (free, scan QR) → Meta Cloud API (free 1k/month) → mock
 

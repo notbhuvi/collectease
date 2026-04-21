@@ -1,18 +1,21 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Truck, Package, Clock, CheckCircle, PlusCircle } from 'lucide-react'
+import { Truck, Package, Clock, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { TransportLoadForm } from '@/components/transport/load-form'
+import { CreateTransporterDialog } from '@/components/transport/create-transporter-dialog'
 
 export default async function TransportDashboard() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: loads } = await supabase
+  // Use service client to bypass RLS so transport_team can always see all loads
+  const serviceClient = await createServiceClient()
+  const { data: loads } = await serviceClient
     .from('transport_loads')
     .select(`*, awarded:awarded_loads(id, final_amount)`)
     .order('created_at', { ascending: false })
@@ -31,7 +34,12 @@ export default async function TransportDashboard() {
       <PageHeader
         title="Transport Dashboard"
         description="Manage freight loads and transporter bids"
-        actions={<TransportLoadForm />}
+        actions={
+          <div className="flex gap-2">
+            <CreateTransporterDialog />
+            <TransportLoadForm />
+          </div>
+        }
       />
 
       {/* Stats */}

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { sendEmail } from '@/lib/messaging'
 
 export async function GET() {
   const supabase = await createClient()
@@ -19,6 +20,78 @@ export async function GET() {
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ users: data })
+}
+
+export async function POST(request: Request) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+
+  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  // admin can create anyone; transport_team can only create transporters
+  const canCreate = profile?.role === 'admin' || profile?.role === 'transport_team'
+  if (!profile || !canCreate) {
+    return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
+  }
+
+  const body = await request.json()
+  const { email, password, role, full_name, company_name } = body
+
+  // transport_team can only create transporters
+  if (profile.role === 'transport_team' && role !== 'transporter') {
+    return NextResponse.json({ error: 'Transport team can only create transporter accounts' }, { status: 403 })
+  }
+
+  const allowedRoles = ['accounts', 'sales', 'transport_team', 'transporter']
+  if (!email || !password || !role || !allowedRoles.includes(role)) {
+    return NextResponse.json({ error: 'Missing or invalid fields' }, { status: 400 })
+  }
+
+  const serviceClient = await createServiceClient()
+
+  // Create auth user
+  const { data: authData, error: authError } = await serviceClient.auth.admin.createUser({
+    email,
+    password,
+    email_confirm: true,
+    user_metadata: { full_name, role, company_name },
+  })
+
+  if (authError) return NextResponse.json({ error: authError.message }, { status: 500 })
+
+  const newUserId = authData.user.id
+
+  // Upsert profile (trigger should have created it, but just in case)
+  await serviceClient
+    .from('profiles')
+    .upsert({ id: newUserId, email, role, full_name, company_name }, { onConflict: 'id' })
+
+  // Send welcome credentials email
+  try {
+    const roleLabel: Record<string, string> = {
+      accounts: 'Accounts', sales: 'Sales',
+      transport_team: 'Transport Team', transporter: 'Transporter',
+    }
+    const emailBody = `Dear ${full_name || email},
+
+Your SIRPL account has been created. Here are your login credentials:
+
+Email:    ${email}
+Password: ${password}
+Role:     ${roleLabel[role] || role}
+
+Please log in at https://collectease.vercel.app and change your password immediately.
+
+Regards,
+SIRPL Admin
+Samwha India Refractories Pvt. Ltd.`
+
+    await sendEmail(email, 'Your SIRPL Account Credentials', emailBody)
+  } catch (emailErr) {
+    console.error('Credentials email failed:', emailErr)
+  }
+
+  return NextResponse.json({ user: { id: newUserId, email, role, full_name, company_name } }, { status: 201 })
 }
 
 export async function PATCH(request: Request) {

@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Package, LayoutDashboard, FileText, LogOut, Menu, X } from 'lucide-react'
+import { Package, LayoutDashboard, FileText, LogOut, Menu, X, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
@@ -10,6 +10,7 @@ import { useState } from 'react'
 const navItems = [
   { href: '/portal', label: 'Open Loads', icon: LayoutDashboard },
   { href: '/portal/bids', label: 'My Bids', icon: FileText },
+  { href: '/portal/settings', label: 'Settings', icon: Settings },
 ]
 
 export function PortalSidebar({ userName, companyName }: { userName?: string; companyName?: string }) {

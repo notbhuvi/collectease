@@ -484,6 +484,113 @@ export async function generateMSMEComplaintPDF(
   return doc.output('arraybuffer')
 }
 
+// ── Transport Award PDF ───────────────────────────────────────────────────────
+interface TransportAwardInfo {
+  loadId: string
+  pickup: string
+  drop: string
+  material: string
+  weight: string
+  vehicleType: string
+  finalAmount: number
+  transporterName: string
+  pickupDate: string
+  awardedAt: string
+}
+
+export async function generateTransportAwardPDF(info: TransportAwardInfo): Promise<ArrayBuffer> {
+  const { jsPDF } = await import('jspdf')
+  const autoTable = (await import('jspdf-autotable')).default
+
+  const doc = new jsPDF({ unit: 'mm', format: 'a4' })
+  const w = doc.internal.pageSize.getWidth()
+  const margin = 20
+  const logo = getLogoBase64()
+
+  const pickupDateStr = new Date(info.pickupDate).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'long', year: 'numeric',
+  })
+  const awardedAtStr = new Date(info.awardedAt).toLocaleString('en-IN', {
+    day: '2-digit', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+
+  // Header
+  let y = drawHeader(
+    doc, w, margin, logo,
+    { name: 'Samwha India Refractories Pvt. Ltd.' },
+    [`Date: ${awardedAtStr}`, `Load ID: ${info.loadId}`],
+    'Transport Load Award Confirmation'
+  )
+
+  y += 6
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(107, 114, 128)
+  doc.text('AWARDED TO', margin, y)
+  y += 5
+  doc.setFontSize(13)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(17, 24, 39)
+  doc.text(info.transporterName, margin, y)
+  y += 10
+
+  const rows: [string, string][] = [
+    ['Load ID', info.loadId],
+    ['Pickup Location', info.pickup],
+    ['Drop Location', info.drop],
+    ['Material', info.material],
+    ['Weight', info.weight],
+    ['Vehicle Type', info.vehicleType],
+    ['Pickup Date', pickupDateStr],
+    ['Awarded On', awardedAtStr],
+  ]
+
+  autoTable(doc, {
+    startY: y,
+    head: [],
+    body: rows,
+    margin: { left: margin, right: margin },
+    styles: { fontSize: 10, cellPadding: { top: 4, bottom: 4, left: 6, right: 6 } },
+    columnStyles: {
+      0: { fontStyle: 'bold', textColor: [75, 85, 99], cellWidth: 65 },
+      1: { textColor: [17, 24, 39] },
+    },
+    alternateRowStyles: { fillColor: [248, 250, 252] },
+    tableLineColor: [229, 231, 235],
+    tableLineWidth: 0.3,
+  })
+
+  const afterTable = (doc as any).lastAutoTable.finalY
+
+  // Awarded amount highlight
+  const boxH = 16
+  const boxY = afterTable + 4
+  doc.setFillColor(22, 163, 74) // green-600
+  doc.rect(margin, boxY, w - margin * 2, boxH, 'F')
+
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'bold')
+  doc.setTextColor(255, 255, 255)
+  doc.text('AWARDED AMOUNT', margin + 4, boxY + 6)
+
+  doc.setFontSize(14)
+  doc.text(
+    `Rs. ${info.finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`,
+    w - margin - 4, boxY + 11, { align: 'right' }
+  )
+
+  const noteY = boxY + boxH + 12
+  doc.setFontSize(9)
+  doc.setFont('helvetica', 'normal')
+  doc.setTextColor(55, 65, 81)
+  const noteText = `This document serves as official confirmation that the above-mentioned transporter has been awarded the freight load. Please retain this for your records. Our operations team will reach out with further logistics details.`
+  const noteLines = doc.splitTextToSize(noteText, w - margin * 2)
+  doc.text(noteLines, margin, noteY)
+
+  drawFooter(doc, w)
+  return doc.output('arraybuffer')
+}
+
 // ── Report CSV ────────────────────────────────────────────────────────────────
 export async function generateReportCSV(invoices: any[]): Promise<string> {
   const headers = ['Invoice Number', 'Client', 'Amount', 'GST', 'Total', 'Issue Date', 'Due Date', 'Status', 'Paid Date', 'Days Overdue']

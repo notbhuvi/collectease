@@ -41,9 +41,28 @@ export async function proxy(request: NextRequest) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  // Redirect authenticated users away from auth pages
+  // Redirect authenticated users away from auth pages → role-based home
   if (user && pathname.startsWith('/auth/')) {
-    return NextResponse.redirect(new URL('/dashboard', request.url))
+    // Fetch role to redirect correctly
+    try {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single()
+
+      const roleHome: Record<string, string> = {
+        admin: '/admin',
+        accounts: '/dashboard',
+        sales: '/dashboard',
+        transport_team: '/transport',
+        transporter: '/portal',
+      }
+      const dest = profile?.role ? (roleHome[profile.role] ?? '/dashboard') : '/dashboard'
+      return NextResponse.redirect(new URL(dest, request.url))
+    } catch {
+      return NextResponse.redirect(new URL('/dashboard', request.url))
+    }
   }
 
   return response

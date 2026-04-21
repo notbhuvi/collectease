@@ -1,3 +1,4 @@
+import { createServiceClient } from '@/lib/supabase/server'
 import { createClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
@@ -6,7 +7,9 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import { AwardBidButton } from '@/components/transport/award-bid-button'
 import { CloseLoadButton } from '@/components/transport/close-load-button'
-import { MapPin, Package, Truck, Calendar, Clock, IndianRupee } from 'lucide-react'
+import { DeleteBidButton } from '@/components/transport/delete-bid-button'
+import { EditBidButton } from '@/components/transport/edit-bid-button'
+import { MapPin, Package, Truck, Calendar, Clock, IndianRupee, Medal } from 'lucide-react'
 
 export default async function LoadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -14,15 +17,25 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: load } = await supabase
+  // Use service client to bypass RLS for transport team / admin
+  const serviceClient = await createServiceClient()
+
+  const { data: load } = await serviceClient
     .from('transport_loads')
-    .select(`*, creator:profiles!created_by(full_name, email), awarded:awarded_loads(id, final_amount, transporter_id, awarded_at, transporter:profiles!transporter_id(full_name, company_name))`)
+    .select(`
+      *,
+      creator:profiles!created_by(full_name, email),
+      awarded:awarded_loads(
+        id, final_amount, transporter_id, awarded_at,
+        transporter:profiles!transporter_id(full_name, company_name)
+      )
+    `)
     .eq('id', id)
     .single()
 
   if (!load) notFound()
 
-  const { data: bids } = await supabase
+  const { data: bids } = await serviceClient
     .from('transport_bids')
     .select(`*, transporter:profiles!transporter_id(full_name, company_name, email)`)
     .eq('load_id', id)
@@ -33,9 +46,17 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const deadlinePassed = new Date(load.bidding_deadline) < new Date()
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
+  const awardedData = Array.isArray(load.awarded) ? load.awarded[0] : load.awarded
 
   const statusVariant: Record<string, any> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
+  }
+
+  function getRankLabel(index: number) {
+    if (index === 0) return '🥇'
+    if (index === 1) return '🥈'
+    if (index === 2) return '🥉'
+    return `#${index + 1}`
   }
 
   return (
@@ -56,8 +77,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           <CardHeader><CardTitle className="text-base">Load Details</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <div className="flex items-start gap-2">
-              <Badge variant={statusVariant[load.status]} className="mt-0.5">{load.status}</Badge>
-              {deadlinePassed && isOpen && <span className="text-xs text-red-500 font-medium mt-1">Deadline passed</span>}
+              <Badge variant={statusVariant[load.status]} className="mt-0.5 capitalize">{load.status}</Badge>
+              {deadlinePassed && isOpen && (
+                <span className="text-xs text-red-500 font-medium mt-1">Deadline passed</span>
+              )}
             </div>
             {[
               { icon: MapPin, label: 'From', value: load.pickup_location },
@@ -86,14 +109,20 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
 
         {/* Bids */}
         <div className="lg:col-span-2 space-y-4">
-          {isAwarded && (load.awarded as any) && (
+          {isAwarded && awardedData && (
             <Card className="border-green-200 bg-green-50">
               <CardContent className="p-4">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-1">🏆 Awarded To</p>
-                    <p className="text-lg font-bold text-green-900">{(load.awarded as any).transporter?.company_name || (load.awarded as any).transporter?.full_name}</p>
-                    <p className="text-sm text-green-700">Final amount: {formatCurrency((load.awarded as any).final_amount)}</p>
+                    <p className="text-xs font-medium text-green-700 uppercase tracking-wide mb-1">
+                      🏆 Awarded To
+                    </p>
+                    <p className="text-lg font-bold text-green-900">
+                      {(awardedData as any).transporter?.company_name || (awardedData as any).transporter?.full_name}
+                    </p>
+                    <p className="text-sm text-green-700">
+                      Final amount: {formatCurrency((awardedData as any).final_amount)}
+                    </p>
                   </div>
                 </div>
               </CardContent>
@@ -103,12 +132,14 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-base">
-                  Bids Received ({allBids.length})
+                <CardTitle className="text-base flex items-center gap-2">
+                  <Medal className="h-4 w-4 text-orange-500" />
+                  Leaderboard — Bids Received ({allBids.length})
                 </CardTitle>
                 {lowestBid && (
                   <span className="text-xs text-gray-500">
-                    Lowest: <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)}</span>
+                    Lowest:{' '}
+                    <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)}</span>
                   </span>
                 )}
               </div>
@@ -124,23 +155,36 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b border-gray-100 bg-gray-50">
-                        <th className="text-left text-xs font-medium text-gray-500 px-6 py-3">Transporter</th>
+                        <th className="text-center text-xs font-medium text-gray-500 px-3 py-3 w-12">Rank</th>
+                        <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Transporter</th>
                         <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Bid Amount</th>
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Remarks</th>
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Submitted</th>
-                        {isOpen && !deadlinePassed && <th className="text-right text-xs font-medium text-gray-500 px-6 py-3">Action</th>}
+                        <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {allBids.map((bid, index) => {
                         const transporter = bid.transporter as any
+                        const isLowest = index === 0
                         return (
-                          <tr key={bid.id} className={`hover:bg-gray-50 ${index === 0 ? 'bg-green-50/50' : ''}`}>
-                            <td className="px-6 py-3">
+                          <tr key={bid.id} className={`hover:bg-gray-50 ${isLowest ? 'bg-green-50/50' : ''}`}>
+                            <td className="px-3 py-3 text-center">
+                              <span className={`text-base font-bold ${isLowest ? 'text-green-600' : 'text-gray-400'}`}>
+                                {getRankLabel(index)}
+                              </span>
+                            </td>
+                            <td className="px-4 py-3">
                               <div className="flex items-center gap-2">
-                                {index === 0 && <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">Lowest</span>}
+                                {isLowest && (
+                                  <span className="text-xs bg-green-100 text-green-700 px-1.5 py-0.5 rounded font-medium">
+                                    Lowest
+                                  </span>
+                                )}
                                 <div>
-                                  <p className="font-medium text-gray-900">{transporter?.company_name || transporter?.full_name || '—'}</p>
+                                  <p className="font-medium text-gray-900">
+                                    {transporter?.company_name || transporter?.full_name || '—'}
+                                  </p>
                                   <p className="text-xs text-gray-400">{transporter?.email}</p>
                                 </div>
                               </div>
@@ -148,20 +192,46 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                             <td className="px-4 py-3 text-right font-semibold text-gray-900">
                               {formatCurrency(bid.bid_amount)}
                             </td>
-                            <td className="px-4 py-3 text-gray-500 max-w-[200px] truncate">{bid.remarks || '—'}</td>
+                            <td className="px-4 py-3 text-gray-500 max-w-[160px] truncate">
+                              {bid.remarks || '—'}
+                            </td>
                             <td className="px-4 py-3 text-gray-400 text-xs">
                               {new Date(bid.created_at).toLocaleDateString('en-IN')}
+                              {bid.updated_at && bid.updated_at !== bid.created_at && (
+                                <p className="text-gray-300">Edited {new Date(bid.updated_at).toLocaleDateString('en-IN')}</p>
+                              )}
                             </td>
-                            {isOpen && !deadlinePassed && (
-                              <td className="px-6 py-3 text-right">
-                                <AwardBidButton
-                                  loadId={load.id}
-                                  transporterId={bid.transporter_id}
-                                  bidAmount={bid.bid_amount}
-                                  transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
-                                />
-                              </td>
-                            )}
+                            <td className="px-4 py-3 text-right">
+                              <div className="flex items-center justify-end gap-1.5">
+                                {isOpen && (
+                                  <>
+                                    <EditBidButton
+                                      bidId={bid.id}
+                                      currentAmount={bid.bid_amount}
+                                      currentRemarks={bid.remarks || ''}
+                                      transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                    />
+                                    {!isLowest && (
+                                      <AwardBidButton
+                                        loadId={load.id}
+                                        transporterId={bid.transporter_id}
+                                        bidAmount={bid.bid_amount}
+                                        transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                      />
+                                    )}
+                                    {isLowest && (
+                                      <AwardBidButton
+                                        loadId={load.id}
+                                        transporterId={bid.transporter_id}
+                                        bidAmount={bid.bid_amount}
+                                        transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                      />
+                                    )}
+                                  </>
+                                )}
+                                <DeleteBidButton bidId={bid.id} transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'} />
+                              </div>
+                            </td>
                           </tr>
                         )
                       })}

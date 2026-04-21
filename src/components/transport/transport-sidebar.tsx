@@ -2,8 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Truck, LayoutDashboard, ClipboardList, LogOut, Menu, X } from 'lucide-react'
-import Image from 'next/image'
+import { Truck, LayoutDashboard, ClipboardList, LogOut, Menu, X, Settings } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
@@ -11,6 +10,7 @@ import { useState } from 'react'
 const navItems = [
   { href: '/transport', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/transport/loads', label: 'All Loads', icon: ClipboardList },
+  { href: '/transport/settings', label: 'Settings', icon: Settings },
 ]
 
 export function TransportSidebar({ userName }: { userName?: string }) {
@@ -51,6 +51,7 @@ export function TransportSidebar({ userName }: { userName?: string }) {
             </Link>
           )
         })}
+
       </nav>
 
       <div className="px-3 py-4 border-t border-gray-100">
