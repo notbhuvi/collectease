@@ -48,7 +48,7 @@ export async function proxy(request: NextRequest) {
       const { data: profile } = await supabase
         .from('profiles')
         .select('role')
-        .eq('id', user.id)
+        .eq('email', user.email)
         .single()
 
       const roleHome: Record<string, string> = {
