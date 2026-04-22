@@ -1,14 +1,11 @@
 import { NextResponse, type NextRequest } from 'next/server'
 import { createServerClient } from '@supabase/ssr'
-import { getProfileForUser } from '@/lib/profile'
-import { canAccessPath, getRoleHome } from '@/lib/roles'
 
 export async function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
 
-  // Skip auth middleware if Supabase is not configured yet
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL
-  if (!supabaseUrl || supabaseUrl === 'your_supabase_project_url') {
+  if (!supabaseUrl || !supabaseUrl.startsWith('http')) {
     return NextResponse.next({ request })
   }
 
@@ -19,9 +16,7 @@ export async function proxy(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        getAll() {
-          return request.cookies.getAll()
-        },
+        getAll() { return request.cookies.getAll() },
         setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request })
@@ -35,34 +30,61 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const isAuthRoute = pathname === '/auth' || pathname.startsWith('/auth/')
   const protectedPrefixes = ['/dashboard', '/transport', '/portal', '/admin']
   const isProtected = protectedPrefixes.some(p => pathname.startsWith(p))
+  const isAuth = pathname.startsWith('/auth/')
 
-  // Redirect unauthenticated users from protected routes
+  // Unauthenticated on protected route → login
   if (!user && isProtected) {
     return NextResponse.redirect(new URL('/auth/login', request.url))
   }
 
-  if (!user) {
-    return response
+  // Authenticated on auth pages → home (page.tsx will handle role redirect via service client)
+  if (user && isAuth) {
+    return NextResponse.redirect(new URL('/', request.url))
   }
 
-  const profile = await getProfileForUser(supabase, user, 'id,email,role')
-  const roleHome = getRoleHome(profile?.role, '/dashboard')
+  // Role-based route guards
+  if (user && isProtected) {
+    const { data: profile } = await supabase
+      .from('profiles')
+      .select('role')
+      .eq('id', user.id)
+      .single()
 
-  // Redirect authenticated users away from auth pages → role-based home
-  if (isAuthRoute) {
-    return NextResponse.redirect(new URL(roleHome, request.url))
-  }
+    const role = profile?.role as string | undefined
 
-  if (isProtected && !canAccessPath(profile?.role, pathname)) {
-    return NextResponse.redirect(new URL(roleHome, request.url))
+    const roleHome: Record<string, string> = {
+      admin: '/admin',
+      accounts: '/dashboard',
+      transport_team: '/transport',
+      transporter: '/portal',
+    }
+
+    const guards: { prefix: string; allowed: string[] }[] = [
+      { prefix: '/admin',     allowed: ['admin'] },
+      { prefix: '/transport', allowed: ['admin', 'transport_team'] },
+      { prefix: '/portal',    allowed: ['admin', 'transporter'] },
+      { prefix: '/dashboard', allowed: ['admin', 'accounts'] },
+    ]
+
+    for (const guard of guards) {
+      if (pathname.startsWith(guard.prefix) && role && !guard.allowed.includes(role)) {
+        const dest = roleHome[role] ?? '/auth/login'
+        return NextResponse.redirect(new URL(dest, request.url))
+      }
+    }
   }
 
   return response
 }
 
 export const config = {
-  matcher: ['/dashboard/:path*', '/transport/:path*', '/portal/:path*', '/admin/:path*', '/auth/:path*'],
+  matcher: [
+    '/dashboard/:path*',
+    '/transport/:path*',
+    '/portal/:path*',
+    '/admin/:path*',
+    '/auth/:path*',
+  ],
 }
