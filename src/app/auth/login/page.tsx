@@ -5,8 +5,6 @@ import { useRouter } from 'next/navigation'
 import { Mail, Lock } from 'lucide-react'
 import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
-import { getProfileForUser } from '@/lib/profile'
-import { getRoleHome } from '@/lib/roles'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 
@@ -23,7 +21,7 @@ export default function LoginPage() {
     setLoading(true)
 
     const supabase = createClient()
-    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
       setError('Invalid email or password')
@@ -31,20 +29,8 @@ export default function LoginPage() {
       return
     }
 
-    if (!authData.user) {
-      setError('Unable to load your account after login')
-      setLoading(false)
-      return
-    }
-
-    const profile = await getProfileForUser(
-      supabase,
-      authData.user,
-      'role,email,id'
-    )
-
-    const destination = getRoleHome(profile?.role, '/dashboard')
-    router.replace(destination)
+    // Let the server-side page.tsx handle role-based redirect via service client
+    router.replace('/')
   }
 
   return (

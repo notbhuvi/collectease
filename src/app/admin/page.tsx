@@ -89,13 +89,11 @@ export default async function AdminPage() {
   const roleColors: Record<string, string> = {
     admin: 'bg-violet-100 text-violet-700',
     accounts: 'bg-blue-100 text-blue-700',
-    sales: 'bg-cyan-100 text-cyan-700',
     transport_team: 'bg-orange-100 text-orange-700',
     transporter: 'bg-emerald-100 text-emerald-700',
   }
   const roleLabels: Record<string, string> = {
     admin: 'Admin', accounts: 'Accounts',
-    sales: 'Sales',
     transport_team: 'Transport Team', transporter: 'Transporter',
   }
 
@@ -177,7 +175,7 @@ export default async function AdminPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-sm">Users by Role</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-2">
-              {['admin', 'accounts', 'sales', 'transport_team', 'transporter'].map(role => {
+              {['admin', 'accounts', 'transport_team', 'transporter'].map(role => {
                 const count = roleCounts[role] || 0
                 return (
                   <div key={role} className="flex items-center justify-between">
