@@ -1,25 +1,22 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { sendEmail } from '@/lib/messaging'
+import { getAdminUserDirectory } from '@/lib/admin-users'
+import { getOrCreateProfileForUser } from '@/lib/profile'
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   if (!profile || profile.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const serviceClient = await createServiceClient()
-  const { data, error } = await serviceClient
-    .from('profiles')
-    .select('*')
-    .order('created_at', { ascending: false })
-
-  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-  return NextResponse.json({ users: data })
+  const users = await getAdminUserDirectory(serviceClient)
+  return NextResponse.json({ users })
 }
 
 export async function POST(request: Request) {
@@ -27,7 +24,8 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   // admin can create anyone; transport_team can only create transporters
   const canCreate = profile?.role === 'admin' || profile?.role === 'transport_team'
   if (!profile || !canCreate) {
@@ -46,8 +44,6 @@ export async function POST(request: Request) {
   if (!email || !password || !role || !allowedRoles.includes(role)) {
     return NextResponse.json({ error: 'Missing or invalid fields' }, { status: 400 })
   }
-
-  const serviceClient = await createServiceClient()
 
   // Create auth user
   const { data: authData, error: authError } = await serviceClient.auth.admin.createUser({
@@ -99,7 +95,8 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   if (!profile || profile.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -109,7 +106,6 @@ export async function PATCH(request: Request) {
 
   if (!user_id) return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
 
-  const serviceClient = await createServiceClient()
   const update: Record<string, string> = {}
   if (role) update.role = role
   if (full_name !== undefined) update.full_name = full_name
@@ -131,7 +127,8 @@ export async function DELETE(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   if (!profile || profile.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -140,8 +137,6 @@ export async function DELETE(request: Request) {
   const { user_id } = body
   if (!user_id) return NextResponse.json({ error: 'Missing user_id' }, { status: 400 })
   if (user_id === user.id) return NextResponse.json({ error: 'Cannot delete your own account' }, { status: 400 })
-
-  const serviceClient = await createServiceClient()
 
   // Delete related transport data first to avoid FK violations
   await serviceClient.from('awarded_loads').delete().eq('transporter_id', user_id)

@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getOrCreateProfileForUser } from '@/lib/profile'
 
 export async function DELETE(
   _request: Request,
@@ -11,12 +12,11 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || !['admin', 'transport_team'].includes(profile.role)) {
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'transport_team')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
-
-  const serviceClient = await createServiceClient()
 
   // Delete in dependency order: awarded → bids → load
   await serviceClient.from('awarded_loads').delete().eq('load_id', id)

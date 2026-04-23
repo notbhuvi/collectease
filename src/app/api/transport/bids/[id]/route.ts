@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getOrCreateProfileForUser } from '@/lib/profile'
 
 // DELETE — transport_team/admin can delete any bid
 export async function DELETE(
@@ -11,12 +12,12 @@ export async function DELETE(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || !['admin', 'transport_team'].includes(profile.role)) {
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'transport_team')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  const serviceClient = await createServiceClient()
   const { error } = await serviceClient.from('transport_bids').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ success: true })
@@ -32,15 +33,15 @@ export async function PATCH(
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
-  if (!profile || !['admin', 'transport_team'].includes(profile.role)) {
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'transport_team')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
   const body = await request.json()
   const { bid_amount, remarks } = body
 
-  const serviceClient = await createServiceClient()
   const { data, error } = await serviceClient
     .from('transport_bids')
     .update({ bid_amount: Number(bid_amount), remarks, updated_at: new Date().toISOString() })

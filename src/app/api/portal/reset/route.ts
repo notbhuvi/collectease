@@ -1,12 +1,23 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getOrCreateProfileForUser } from '@/lib/profile'
+
+type ResetBidLoadSummary = {
+  status: string
+}
+
+function getLoadStatus(load: ResetBidLoadSummary | ResetBidLoadSummary[] | null | undefined) {
+  if (!load) return null
+  return Array.isArray(load) ? load[0]?.status ?? null : load.status
+}
 
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: profile } = await supabase.from('profiles').select('role').eq('id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   if (!profile || profile.role !== 'transporter') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
@@ -21,8 +32,6 @@ export async function POST(request: Request) {
   })
   if (authError) return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
 
-  const serviceClient = await createServiceClient()
-
   // Delete own bids on completed/awarded loads only
   const { data: myBids } = await serviceClient
     .from('transport_bids')
@@ -31,7 +40,7 @@ export async function POST(request: Request) {
 
   const oldBidIds = (myBids || [])
     .filter(b => {
-      const status = (b.load as any)?.status
+      const status = getLoadStatus(b.load as ResetBidLoadSummary | ResetBidLoadSummary[] | null | undefined)
       return status === 'completed' || status === 'awarded'
     })
     .map(b => b.id)

@@ -1,21 +1,18 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { sendEmail, buildNewLoadEmail } from '@/lib/messaging'
-
-async function getProfile(supabase: Awaited<ReturnType<typeof createClient>>, userId: string) {
-  const { data } = await supabase.from('profiles').select('role').eq('id', userId).single()
-  return data
-}
+import { getOrCreateProfileForUser } from '@/lib/profile'
 
 export async function GET() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const profile = await getProfile(supabase, user.id)
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
   if (!profile) return NextResponse.json({ error: 'No profile' }, { status: 403 })
 
-  let query = supabase
+  let query = serviceClient
     .from('transport_loads')
     .select(`*, creator:profiles!created_by(full_name, email), awarded:awarded_loads(id, final_amount, transporter_id, awarded_at, transporter:profiles!transporter_id(full_name, company_name))`)
     .order('created_at', { ascending: false })
@@ -35,8 +32,9 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const profile = await getProfile(supabase, user.id)
-  if (!profile || !['admin', 'transport_team'].includes(profile.role)) {
+  const serviceClient = await createServiceClient()
+  const profile = await getOrCreateProfileForUser(serviceClient, user, 'role')
+  if (!profile || (profile.role !== 'admin' && profile.role !== 'transport_team')) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
@@ -47,7 +45,6 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
-  const serviceClient = await createServiceClient()
   const { data, error } = await serviceClient
     .from('transport_loads')
     .insert({
