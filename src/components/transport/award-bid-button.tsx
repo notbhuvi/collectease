@@ -10,23 +10,25 @@ import { Trophy } from 'lucide-react'
 interface Props {
   loadId: string
   transporterId: string
-  bidAmount: number
+  bidRate: number
+  totalFare: number
   transporterName: string
+  rateLabel: string
 }
 
-export function AwardBidButton({ loadId, transporterId, bidAmount, transporterName }: Props) {
+export function AwardBidButton({ loadId, transporterId, bidRate, totalFare, transporterName, rateLabel }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
   async function handleAward() {
-    if (!confirm(`Award this load to ${transporterName} for ${formatCurrency(bidAmount)}?`)) return
+    if (!confirm(`Award this load to ${transporterName} at ${formatCurrency(bidRate)} ${rateLabel} with total fare ${formatCurrency(totalFare)}?`)) return
     setLoading(true)
     try {
       const res = await fetch('/api/transport/award', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ load_id: loadId, transporter_id: transporterId, final_amount: bidAmount }),
+        body: JSON.stringify({ load_id: loadId, transporter_id: transporterId }),
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error)

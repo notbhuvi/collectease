@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getOrCreateProfileForUser } from '@/lib/profile'
 import { buildUpdatedLoadEmail, sendEmail } from '@/lib/messaging'
+import { formatLoadQuantity, normalizeTransportQuantityUnit, parseNumericQuantity } from '@/lib/transport'
 
 function buildLoadEmailPayload(load: {
   id: string
@@ -9,6 +10,8 @@ function buildLoadEmailPayload(load: {
   drop_location: string
   material: string
   weight: string
+  quantity_value?: number | null
+  quantity_unit?: string | null
   vehicle_type: string
   pickup_date: string
   bidding_deadline: string
@@ -18,7 +21,7 @@ function buildLoadEmailPayload(load: {
     pickup: load.pickup_location,
     drop: load.drop_location,
     material: load.material,
-    weight: load.weight,
+    quantity: formatLoadQuantity(load),
     vehicleType: load.vehicle_type,
     pickupDate: load.pickup_date,
     biddingDeadline: load.bidding_deadline,
@@ -42,9 +45,11 @@ export async function PATCH(
   }
 
   const body = await request.json()
-  const { pickup_location, drop_location, material, weight, vehicle_type, pickup_date, bidding_deadline, notes } = body
+  const { pickup_location, drop_location, material, quantity_value, quantity_unit, vehicle_type, pickup_date, bidding_deadline, notes } = body
+  const parsedQuantity = parseNumericQuantity(quantity_value)
+  const normalizedUnit = normalizeTransportQuantityUnit(quantity_unit)
 
-  if (!pickup_location || !drop_location || !material || !weight || !vehicle_type || !pickup_date || !bidding_deadline) {
+  if (!pickup_location || !drop_location || !material || parsedQuantity === null || !vehicle_type || !pickup_date || !bidding_deadline) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -68,7 +73,9 @@ export async function PATCH(
       pickup_location,
       drop_location,
       material,
-      weight,
+      weight: formatLoadQuantity({ quantity_value: parsedQuantity, quantity_unit: normalizedUnit }),
+      quantity_value: parsedQuantity,
+      quantity_unit: normalizedUnit,
       vehicle_type,
       pickup_date,
       bidding_deadline,
@@ -92,9 +99,24 @@ export async function PATCH(
       const subject = `✏️ Load Updated — ${updatedLoad.pickup_location} → ${updatedLoad.drop_location}`
       const emailBody = buildUpdatedLoadEmail(emailCtx)
 
-      for (const transporter of transporters) {
-        if (transporter.email) {
-          sendEmail(transporter.email, subject, emailBody).catch(console.error)
+      const emailJobs = transporters
+        .filter(transporter => !!transporter.email)
+        .map(transporter =>
+          sendEmail(transporter.email!, subject, emailBody, 'friendly', undefined, undefined, { department: 'transport' })
+        )
+
+      const emailResults = await Promise.allSettled(emailJobs)
+      for (const result of emailResults) {
+        if (result.status === 'rejected') {
+          console.error('Transporter update notification failed:', result.reason)
+          continue
+        }
+
+        if (!result.value.success) {
+          console.error('Transporter update notification failed:', {
+            error: result.value.error,
+            provider: result.value.provider,
+          })
         }
       }
     }

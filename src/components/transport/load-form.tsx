@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
 import { PlusCircle } from 'lucide-react'
+import { TRANSPORT_QUANTITY_UNITS } from '@/lib/transport'
 
 export function TransportLoadForm() {
   const router = useRouter()
@@ -14,7 +15,7 @@ export function TransportLoadForm() {
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [form, setForm] = useState({
-    pickup_location: '', drop_location: '', material: '', weight: '',
+    pickup_location: '', drop_location: '', material: '', quantity_value: '', quantity_unit: 'MT',
     vehicle_type: '', pickup_date: '', bidding_deadline: '', notes: '',
   })
 
@@ -35,7 +36,7 @@ export function TransportLoadForm() {
       if (!res.ok) throw new Error(data.error)
       toast({ title: 'Load created', description: 'Transporters can now bid on this load.', variant: 'success' })
       setOpen(false)
-      setForm({ pickup_location: '', drop_location: '', material: '', weight: '', vehicle_type: '', pickup_date: '', bidding_deadline: '', notes: '' })
+      setForm({ pickup_location: '', drop_location: '', material: '', quantity_value: '', quantity_unit: 'MT', vehicle_type: '', pickup_date: '', bidding_deadline: '', notes: '' })
       router.refresh()
     } catch (err: any) {
       toast({ title: 'Error', description: err.message, variant: 'error' })
@@ -65,7 +66,27 @@ export function TransportLoadForm() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Input label="Material" placeholder="e.g. Refractory Bricks" value={form.material} onChange={e => set('material', e.target.value)} required />
-              <Input label="Weight / Quantity" placeholder="e.g. 20 MT" value={form.weight} onChange={e => set('weight', e.target.value)} required />
+              <Input
+                label="Quantity"
+                type="number"
+                min="0.01"
+                step="0.01"
+                placeholder="e.g. 20"
+                value={form.quantity_value}
+                onChange={e => set('quantity_value', e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Unit</label>
+              <select
+                className="w-full h-9 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={form.quantity_unit}
+                onChange={e => set('quantity_unit', e.target.value)}
+                required
+              >
+                {TRANSPORT_QUANTITY_UNITS.map(unit => <option key={unit} value={unit}>{unit}</option>)}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>

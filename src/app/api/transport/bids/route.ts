@@ -1,9 +1,13 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getOrCreateProfileForUser } from '@/lib/profile'
+import { calculateTransportTotalFare, getLoadQuantity, parseNumericQuantity } from '@/lib/transport'
 
 type BidLoadSummary = {
   bidding_deadline: string
+  quantity_value?: number | null
+  quantity_unit?: string | null
+  weight?: string | null
 }
 
 function getBidLoad(load: BidLoadSummary | BidLoadSummary[] | null | undefined) {
@@ -57,7 +61,7 @@ export async function POST(request: Request) {
   // Verify load is open and deadline not passed
   const { data: load } = await serviceClient
     .from('transport_loads')
-    .select('status, bidding_deadline')
+    .select('status, bidding_deadline, quantity_value, quantity_unit, weight')
     .eq('id', load_id)
     .single()
 
@@ -68,9 +72,23 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Bidding deadline has passed' }, { status: 400 })
   }
 
+  const rate = parseNumericQuantity(bid_amount)
+  const quantity = getLoadQuantity(load)
+  const totalAmount = calculateTransportTotalFare(quantity.quantityValue, rate)
+  if (rate === null || totalAmount === null) {
+    return NextResponse.json({ error: 'Invalid bid amount or load quantity' }, { status: 400 })
+  }
+
   const { data, error } = await serviceClient
     .from('transport_bids')
-    .upsert({ load_id, transporter_id: user.id, bid_amount: Number(bid_amount), remarks, updated_at: new Date().toISOString() }, { onConflict: 'load_id,transporter_id' })
+    .upsert({
+      load_id,
+      transporter_id: user.id,
+      bid_amount: rate,
+      total_amount: totalAmount,
+      remarks,
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'load_id,transporter_id' })
     .select()
     .single()
 
@@ -95,7 +113,7 @@ export async function PATCH(request: Request) {
   // Verify ownership and deadline
   const { data: bid } = await serviceClient
     .from('transport_bids')
-    .select(`*, load:transport_loads(status, bidding_deadline)`)
+    .select(`*, load:transport_loads(status, bidding_deadline, quantity_value, quantity_unit, weight)`)
     .eq('id', bid_id)
     .eq('transporter_id', user.id)
     .single()
@@ -107,9 +125,16 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ error: 'Bidding deadline has passed' }, { status: 400 })
   }
 
+  const rate = parseNumericQuantity(bid_amount)
+  const quantity = getLoadQuantity(load)
+  const totalAmount = calculateTransportTotalFare(quantity.quantityValue, rate)
+  if (rate === null || totalAmount === null) {
+    return NextResponse.json({ error: 'Invalid bid amount or load quantity' }, { status: 400 })
+  }
+
   const { data, error } = await serviceClient
     .from('transport_bids')
-    .update({ bid_amount: Number(bid_amount), remarks, updated_at: new Date().toISOString() })
+    .update({ bid_amount: rate, total_amount: totalAmount, remarks, updated_at: new Date().toISOString() })
     .eq('id', bid_id)
     .select()
     .single()

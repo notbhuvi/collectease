@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getOrCreateProfileForUser } from '@/lib/profile'
+import { calculateTransportTotalFare, getLoadQuantity, parseNumericQuantity } from '@/lib/transport'
 
 // DELETE — transport_team/admin can delete any bid
 export async function DELETE(
@@ -42,9 +43,26 @@ export async function PATCH(
   const body = await request.json()
   const { bid_amount, remarks } = body
 
+  const { data: existingBid, error: bidError } = await serviceClient
+    .from('transport_bids')
+    .select('id, load:transport_loads(quantity_value, quantity_unit, weight)')
+    .eq('id', id)
+    .single()
+
+  if (bidError || !existingBid) {
+    return NextResponse.json({ error: 'Bid not found' }, { status: 404 })
+  }
+
+  const rate = parseNumericQuantity(bid_amount)
+  const quantity = getLoadQuantity(existingBid.load as { quantity_value?: number | null; quantity_unit?: string | null; weight?: string | null })
+  const totalAmount = calculateTransportTotalFare(quantity.quantityValue, rate)
+  if (rate === null || totalAmount === null) {
+    return NextResponse.json({ error: 'Invalid bid amount or load quantity' }, { status: 400 })
+  }
+
   const { data, error } = await serviceClient
     .from('transport_bids')
-    .update({ bid_amount: Number(bid_amount), remarks, updated_at: new Date().toISOString() })
+    .update({ bid_amount: rate, total_amount: totalAmount, remarks, updated_at: new Date().toISOString() })
     .eq('id', id)
     .select()
     .single()

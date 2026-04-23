@@ -1,25 +1,28 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Package, MapPin, Truck, Calendar, Clock, TrendingDown } from 'lucide-react'
 import { BidModal } from '@/components/portal/bid-modal'
+import { calculateTransportTotalFare, formatLoadQuantity, getBidRateLabel, getLoadQuantity } from '@/lib/transport'
+import { formatCurrency } from '@/lib/utils'
 
 export default async function PortalPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
+  const serviceClient = await createServiceClient()
 
   // Get open loads
-  const { data: loads } = await supabase
+  const { data: loads } = await serviceClient
     .from('transport_loads')
     .select('*')
     .eq('status', 'open')
     .order('created_at', { ascending: false })
 
   // Get this transporter's existing bids
-  const { data: myBids } = await supabase
+  const { data: myBids } = await serviceClient
     .from('transport_bids')
     .select('load_id, bid_amount, id')
     .eq('transporter_id', user.id)
@@ -31,7 +34,7 @@ export default async function PortalPage() {
   // allows transporters to read all bid amounts on open loads (amounts only, not who bid).
   const lowestBidMap = new Map<string, number>()
   if (openLoads.length > 0) {
-    const { data: allBids } = await supabase
+    const { data: allBids } = await serviceClient
       .from('transport_bids')
       .select('load_id, bid_amount')
       .in('load_id', openLoads.map(l => l.id))
@@ -66,6 +69,11 @@ export default async function PortalPage() {
             const deadlinePassed = new Date(load.bidding_deadline) < new Date()
             const lowestBid = lowestBidMap.get(load.id)
             const iAmLowest = existingBid && lowestBid === existingBid.bid_amount
+            const quantity = getLoadQuantity(load)
+            const quantityText = formatLoadQuantity(load)
+            const rateLabel = getBidRateLabel(quantity.quantityUnit)
+            const lowestFare = calculateTransportTotalFare(quantity.quantityValue, lowestBid)
+            const myTotalFare = calculateTransportTotalFare(quantity.quantityValue, existingBid?.bid_amount)
 
             return (
               <Card key={load.id} className={`relative overflow-hidden ${existingBid ? 'border-emerald-200' : ''}`}>
@@ -96,8 +104,8 @@ export default async function PortalPage() {
                     <div className="flex items-center gap-2">
                       <Truck className="h-3.5 w-3.5 text-gray-400" />
                       <div>
-                        <p className="text-xs text-gray-400">Vehicle · Weight</p>
-                        <p className="text-sm font-medium text-gray-700">{load.vehicle_type} · {load.weight}</p>
+                        <p className="text-xs text-gray-400">Vehicle · Quantity</p>
+                        <p className="text-sm font-medium text-gray-700">{load.vehicle_type} · {quantityText}</p>
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -121,7 +129,7 @@ export default async function PortalPage() {
                   </div>
 
                   {/* Current lowest bid indicator */}
-                  {lowestBid && !deadlinePassed && (
+                  {lowestBid !== undefined && !deadlinePassed && (
                     <div className={`flex items-center gap-2 px-3 py-2 rounded-lg mb-4 ${
                       iAmLowest ? 'bg-emerald-50 border border-emerald-200' : 'bg-amber-50 border border-amber-200'
                     }`}>
@@ -129,8 +137,9 @@ export default async function PortalPage() {
                       <p className={`text-xs font-medium ${iAmLowest ? 'text-emerald-700' : 'text-amber-700'}`}>
                         Current Lowest Bid:{' '}
                         <span className="font-bold">
-                          ₹{lowestBid.toLocaleString('en-IN')}
+                          {formatCurrency(lowestBid)} {rateLabel}
                         </span>
+                        {lowestFare !== null && <span className="ml-1">· Total {formatCurrency(lowestFare)}</span>}
                         {iAmLowest && <span className="ml-1">— That&apos;s you! 🎉</span>}
                       </p>
                     </div>
@@ -144,11 +153,14 @@ export default async function PortalPage() {
                     <div className="flex items-center justify-between">
                       <p className="text-sm text-emerald-700">
                         Your bid:{' '}
-                        <span className="font-bold">₹{existingBid.bid_amount.toLocaleString('en-IN')}</span>
+                        <span className="font-bold">{formatCurrency(existingBid.bid_amount)} {rateLabel}</span>
+                        {myTotalFare !== null && <span className="text-xs text-emerald-600"> · Total {formatCurrency(myTotalFare)}</span>}
                       </p>
                       {!deadlinePassed && (
                         <BidModal
                           loadId={load.id}
+                          quantityValue={quantity.quantityValue}
+                          quantityUnit={quantity.quantityUnit}
                           existingBid={{ id: existingBid.id, amount: existingBid.bid_amount }}
                           isEdit
                         />
@@ -157,7 +169,7 @@ export default async function PortalPage() {
                   ) : deadlinePassed ? (
                     <p className="text-sm text-red-500 text-center py-2">Bidding closed</p>
                   ) : (
-                    <BidModal loadId={load.id} />
+                    <BidModal loadId={load.id} quantityValue={quantity.quantityValue} quantityUnit={quantity.quantityUnit} />
                   )}
                 </CardContent>
               </Card>

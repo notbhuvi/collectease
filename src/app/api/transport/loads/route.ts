@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { sendEmail, buildNewLoadEmail } from '@/lib/messaging'
 import { getOrCreateProfileForUser } from '@/lib/profile'
+import { formatLoadQuantity, normalizeTransportQuantityUnit, parseNumericQuantity } from '@/lib/transport'
 
 export async function GET() {
   const supabase = await createClient()
@@ -39,9 +40,11 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { pickup_location, drop_location, material, weight, vehicle_type, pickup_date, bidding_deadline, notes } = body
+  const { pickup_location, drop_location, material, quantity_value, quantity_unit, vehicle_type, pickup_date, bidding_deadline, notes } = body
+  const parsedQuantity = parseNumericQuantity(quantity_value)
+  const normalizedUnit = normalizeTransportQuantityUnit(quantity_unit)
 
-  if (!pickup_location || !drop_location || !material || !weight || !vehicle_type || !pickup_date || !bidding_deadline) {
+  if (!pickup_location || !drop_location || !material || parsedQuantity === null || !vehicle_type || !pickup_date || !bidding_deadline) {
     return NextResponse.json({ error: 'Missing required fields' }, { status: 400 })
   }
 
@@ -52,7 +55,9 @@ export async function POST(request: Request) {
       pickup_location,
       drop_location,
       material,
-      weight,
+      weight: formatLoadQuantity({ quantity_value: parsedQuantity, quantity_unit: normalizedUnit }),
+      quantity_value: parsedQuantity,
+      quantity_unit: normalizedUnit,
       vehicle_type,
       pickup_date,
       bidding_deadline,
@@ -80,16 +85,30 @@ export async function POST(request: Request) {
         pickup: pickup_location,
         drop: drop_location,
         material,
-        weight,
+        quantity: formatLoadQuantity({ quantity_value: parsedQuantity, quantity_unit: normalizedUnit }),
         vehicleType: vehicle_type,
         pickupDate: pickup_date,
         biddingDeadline: bidding_deadline,
       })
 
-      // Send to each transporter (fire-and-forget)
-      for (const t of transporters) {
-        if (t.email) {
-          sendEmail(t.email, subject, emailBody).catch(console.error)
+      const emailJobs = transporters
+        .filter(t => !!t.email)
+        .map(t =>
+          sendEmail(t.email!, subject, emailBody, 'friendly', undefined, undefined, { department: 'transport' })
+        )
+
+      const emailResults = await Promise.allSettled(emailJobs)
+      for (const result of emailResults) {
+        if (result.status === 'rejected') {
+          console.error('Transporter notification failed:', result.reason)
+          continue
+        }
+
+        if (!result.value.success) {
+          console.error('Transporter notification failed:', {
+            error: result.value.error,
+            provider: result.value.provider,
+          })
         }
       }
     }

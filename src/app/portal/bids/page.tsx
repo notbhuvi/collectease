@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { formatCurrency } from '@/lib/utils'
 import { FileText, Trophy, Clock } from 'lucide-react'
+import { calculateTransportTotalFare, formatLoadQuantity, getBidRateLabel, getLoadQuantity } from '@/lib/transport'
 
 export default async function MyBidsPage() {
   const supabase = await createClient()
@@ -24,7 +25,7 @@ export default async function MyBidsPage() {
   const loadIds = [...new Set(rawBidList.map(b => b.load_id).filter(Boolean))]
   const { data: loadRows } = loadIds.length > 0
     ? await supabase.from('transport_loads')
-        .select('id, pickup_location, drop_location, material, vehicle_type, pickup_date, bidding_deadline, status')
+        .select('id, pickup_location, drop_location, material, vehicle_type, pickup_date, bidding_deadline, status, weight, quantity_value, quantity_unit')
         .in('id', loadIds)
     : { data: [] }
 
@@ -114,6 +115,8 @@ export default async function MyBidsPage() {
                     const load = bid.load as any
                     const status = getBidStatus(bid)
                     const isWon = status.label === '🏆 Won'
+                    const quantity = load ? getLoadQuantity(load) : { quantityValue: null, quantityUnit: 'MT' as const }
+                    const totalFare = calculateTransportTotalFare(quantity.quantityValue, bid.bid_amount)
                     return (
                       <tr key={bid.id} className={`hover:bg-gray-50 ${isWon ? 'bg-green-50/30' : ''}`}>
                         <td className="px-6 py-3">
@@ -122,12 +125,15 @@ export default async function MyBidsPage() {
                         </td>
                         <td className="px-4 py-3">
                           <p className="text-gray-700">{load?.material}</p>
-                          <p className="text-xs text-gray-400">{load?.vehicle_type} · {new Date(load?.pickup_date).toLocaleDateString('en-IN')}</p>
+                          <p className="text-xs text-gray-400">
+                            {load?.vehicle_type} · {load ? formatLoadQuantity(load) : '—'} · {new Date(load?.pickup_date).toLocaleDateString('en-IN')}
+                          </p>
                         </td>
                         <td className="px-4 py-3 text-right">
                           <p className={`font-semibold ${isWon ? 'text-emerald-600' : 'text-gray-900'}`}>
-                            {formatCurrency(bid.bid_amount)}
+                            {formatCurrency(bid.bid_amount)} {getBidRateLabel(quantity.quantityUnit)}
                           </p>
+                          {totalFare !== null && <p className="text-xs text-gray-500">Total {formatCurrency(totalFare)}</p>}
                           {bid.remarks && <p className="text-xs text-gray-400">{bid.remarks}</p>}
                         </td>
                         <td className="px-4 py-3 text-gray-400 text-xs">

@@ -1,4 +1,10 @@
 import { formatCurrency, formatDate } from './utils'
+import {
+  TRANSPORT_DEPARTMENT_EMAILS,
+  TRANSPORT_DEPARTMENT_MOBILE,
+  TRANSPORT_DEPARTMENT_NAME,
+  buildTransportWorkOrderText,
+} from './transport'
 
 interface ReminderContext {
   businessName: string
@@ -94,33 +100,86 @@ interface EmailAttachment {
   base64: string
 }
 
+type EmailDepartment = 'accounts' | 'transport'
+
+interface EmailOptions {
+  department?: EmailDepartment
+}
+
+interface EmailResult {
+  success: boolean
+  error?: string
+  provider?: 'brevo' | 'resend' | 'mock'
+  messageId?: string
+}
+
+function getErrorMessage(error: unknown): string {
+  if (error instanceof Error) return error.message
+  return String(error)
+}
+
+function getSenderConfig(department: EmailDepartment = 'accounts') {
+  const {
+    BREVO_FROM_NAME,
+    BREVO_FROM_EMAIL,
+    EMAIL_FROM,
+  } = process.env
+
+  const accountsEmail = BREVO_FROM_EMAIL || 'accounts@sirpl.in'
+  const senderEmail = department === 'transport'
+    ? 'jbehera@sirpl.in'
+    : accountsEmail
+  const senderName = department === 'transport'
+    ? TRANSPORT_DEPARTMENT_NAME
+    : (BREVO_FROM_NAME || 'SIRPL')
+  const resendFrom = department === 'transport'
+    ? `${senderName} <${senderEmail}>`
+    : (EMAIL_FROM || `${senderName} <${senderEmail}>`)
+
+  return {
+    name: senderName,
+    email: senderEmail,
+    resendFrom,
+  }
+}
+
 export async function sendEmail(
   to: string,
   subject: string,
   body: string,
   type = 'friendly',
   attachment?: EmailAttachment,
-  ctx?: ReminderContext
-): Promise<{ success: boolean; error?: string }> {
-  const { BREVO_API_KEY, BREVO_FROM_EMAIL, BREVO_FROM_NAME, RESEND_API_KEY, EMAIL_FROM } = process.env
+  ctx?: ReminderContext,
+  options?: EmailOptions
+): Promise<EmailResult> {
+  const { BREVO_API_KEY, RESEND_API_KEY } = process.env
   const html = buildEmailHtml(body, ctx)
+  const department = options?.department || 'accounts'
+  const sender = getSenderConfig(department)
 
   // ── Brevo (primary) ───────────────────────────────────────────────────────
   if (BREVO_API_KEY) {
     try {
       const payload: Record<string, unknown> = {
         sender: {
-          name: BREVO_FROM_NAME || 'SIRPL',
-          email: BREVO_FROM_EMAIL || 'noreply@sirpl.in',
+          name: sender.name,
+          email: sender.email,
         },
         to: [{ email: to }],
         subject,
         textContent: body,
         htmlContent: html,
+        tags: [department, type],
       }
       if (attachment) {
         payload.attachment = [{ content: attachment.base64, name: attachment.name }]
       }
+      console.info('[sendEmail] provider=brevo', {
+        department,
+        to,
+        subject,
+        from: sender.email,
+      })
       const res = await fetch('https://api.brevo.com/v3/smtp/email', {
         method: 'POST',
         headers: { 'api-key': BREVO_API_KEY, 'Content-Type': 'application/json' },
@@ -128,11 +187,18 @@ export async function sendEmail(
       })
       if (!res.ok) {
         const err = await res.json()
-        return { success: false, error: 'Brevo: ' + JSON.stringify(err) }
+        return { success: false, error: 'Brevo: ' + JSON.stringify(err), provider: 'brevo' }
       }
-      return { success: true }
-    } catch (err: any) {
-      return { success: false, error: 'Brevo: ' + err.message }
+      const data = await res.json()
+      console.info('[sendEmail] provider=brevo success', {
+        department,
+        to,
+        subject,
+        messageId: data?.messageId,
+      })
+      return { success: true, provider: 'brevo', messageId: data?.messageId }
+    } catch (err: unknown) {
+      return { success: false, error: 'Brevo: ' + getErrorMessage(err), provider: 'brevo' }
     }
   }
 
@@ -140,7 +206,7 @@ export async function sendEmail(
   if (RESEND_API_KEY) {
     try {
       const payload: Record<string, unknown> = {
-        from: EMAIL_FROM || 'SIRPL <onboarding@resend.dev>',
+        from: sender.resendFrom,
         to: [to],
         subject,
         text: body,
@@ -149,6 +215,12 @@ export async function sendEmail(
       if (attachment) {
         payload.attachments = [{ filename: attachment.name, content: attachment.base64 }]
       }
+      console.info('[sendEmail] provider=resend', {
+        department,
+        to,
+        subject,
+        from: sender.resendFrom,
+      })
       const res = await fetch('https://api.resend.com/emails', {
         method: 'POST',
         headers: { 'Authorization': `Bearer ${RESEND_API_KEY}`, 'Content-Type': 'application/json' },
@@ -156,17 +228,24 @@ export async function sendEmail(
       })
       if (!res.ok) {
         const err = await res.json()
-        return { success: false, error: 'Resend: ' + JSON.stringify(err) }
+        return { success: false, error: 'Resend: ' + JSON.stringify(err), provider: 'resend' }
       }
-      return { success: true }
-    } catch (err: any) {
-      return { success: false, error: 'Resend: ' + err.message }
+      const data = await res.json()
+      console.info('[sendEmail] provider=resend success', {
+        department,
+        to,
+        subject,
+        messageId: data?.id,
+      })
+      return { success: true, provider: 'resend', messageId: data?.id }
+    } catch (err: unknown) {
+      return { success: false, error: 'Resend: ' + getErrorMessage(err), provider: 'resend' }
     }
   }
 
   // ── Mock ──────────────────────────────────────────────────────────────────
   console.log(`[MOCK Email] To: ${to}\nSubject: ${subject}\n${body}`)
-  return { success: true }
+  return { success: true, provider: 'mock' }
 }
 
 // Always polite — no escalation
@@ -181,7 +260,7 @@ interface NewLoadEmailCtx {
   pickup: string
   drop: string
   material: string
-  weight: string
+  quantity: string
   vehicleType: string
   pickupDate: string
   biddingDeadline: string
@@ -206,7 +285,7 @@ Load Details:
 Load ID:         ${ctx.loadId}
 Route:           ${ctx.pickup} → ${ctx.drop}
 Material:        ${ctx.material}
-Weight:          ${ctx.weight}
+Quantity:        ${ctx.quantity}
 Vehicle Type:    ${ctx.vehicleType}
 Pickup Date:     ${pickup}
 Bid Deadline:    ${deadline}
@@ -217,8 +296,9 @@ Please log in to the SIRPL Transporter Portal to submit your bid before the dead
 Note: Bids submitted after the deadline will not be accepted.
 
 Regards,
-SIRPL Transport Department
-Samwha India Refractories Pvt. Ltd.`
+${TRANSPORT_DEPARTMENT_NAME}
+Email: ${TRANSPORT_DEPARTMENT_EMAILS.join(' / ')}
+Mobile: ${TRANSPORT_DEPARTMENT_MOBILE}`
 }
 
 export function buildUpdatedLoadEmail(ctx: UpdatedLoadEmailCtx): string {
@@ -238,7 +318,7 @@ Updated Load Details:
 Load ID:         ${ctx.loadId}
 Route:           ${ctx.pickup} → ${ctx.drop}
 Material:        ${ctx.material}
-Weight:          ${ctx.weight}
+Quantity:        ${ctx.quantity}
 Vehicle Type:    ${ctx.vehicleType}
 Pickup Date:     ${pickup}
 Bid Deadline:    ${deadline}
@@ -247,17 +327,23 @@ Bid Deadline:    ${deadline}
 Please log in to the SIRPL Transporter Portal to review the updated load details and revise your bid if required before the deadline.
 
 Regards,
-SIRPL Transport Department
-Samwha India Refractories Pvt. Ltd.`
+${TRANSPORT_DEPARTMENT_NAME}
+Email: ${TRANSPORT_DEPARTMENT_EMAILS.join(' / ')}
+Mobile: ${TRANSPORT_DEPARTMENT_MOBILE}`
 }
 
 interface WinnerEmailCtx {
   transporterName: string
-  loadId: string
+  transporterEmail?: string | null
+  refNumber: string
+  date: string
   pickup: string
   drop: string
   material: string
-  finalAmount: number
+  quantity: string
+  vehicleType: string
+  rate: string
+  totalFare: string
   pickupDate: string
 }
 
@@ -265,29 +351,21 @@ export function buildTransportWinnerEmail(ctx: WinnerEmailCtx): string {
   const pickup = new Date(ctx.pickupDate).toLocaleDateString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric',
   })
-  const amount = `Rs. ${ctx.finalAmount.toLocaleString('en-IN', { minimumFractionDigits: 2 })}`
 
-  return `Dear ${ctx.transporterName},
-
-Congratulations! Your bid has been selected for the following freight load.
-
-Award Confirmation:
-━━━━━━━━━━━━━━━━━━━━━━
-Load ID:         ${ctx.loadId}
-Route:           ${ctx.pickup} → ${ctx.drop}
-Material:        ${ctx.material}
-Pickup Date:     ${pickup}
-Awarded Amount:  ${amount}
-━━━━━━━━━━━━━━━━━━━━━━
-
-Please find the official award confirmation attached as a PDF.
-Our team will contact you shortly with further instructions.
-
-Thank you for your bid and we look forward to working with you.
-
-Regards,
-SIRPL Transport Department
-Samwha India Refractories Pvt. Ltd.`
+  return buildTransportWorkOrderText({
+    refNumber: ctx.refNumber,
+    date: ctx.date,
+    transporterName: ctx.transporterName,
+    transporterEmail: ctx.transporterEmail,
+    pickup: ctx.pickup,
+    drop: ctx.drop,
+    material: ctx.material,
+    quantity: ctx.quantity,
+    vehicleType: ctx.vehicleType,
+    rate: ctx.rate,
+    totalFare: ctx.totalFare,
+    pickupDate: pickup,
+  })
 }
 
 // ─── WhatsApp ─────────────────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ import { Truck, Package, Clock, CheckCircle } from 'lucide-react'
 import Link from 'next/link'
 import { TransportLoadForm } from '@/components/transport/load-form'
 import { CreateTransporterDialog } from '@/components/transport/create-transporter-dialog'
+import { DeleteLoadButton } from '@/components/transport/delete-load-button'
+import { formatLoadQuantity } from '@/lib/transport'
 
 export default async function TransportDashboard() {
   const supabase = await createClient()
@@ -95,7 +97,7 @@ export default async function TransportDashboard() {
                       </td>
                       <td className="px-4 py-3">
                         <p className="text-gray-700">{load.material}</p>
-                        <p className="text-xs text-gray-400">{load.weight}</p>
+                        <p className="text-xs text-gray-400">{formatLoadQuantity(load)}</p>
                       </td>
                       <td className="px-4 py-3 text-gray-700">{load.vehicle_type}</td>
                       <td className="px-4 py-3 text-gray-500">{new Date(load.pickup_date).toLocaleDateString('en-IN')}</td>
@@ -107,11 +109,14 @@ export default async function TransportDashboard() {
                       <td className="px-4 py-3 text-center">
                         <Badge variant={statusVariant[load.status]}>{load.status}</Badge>
                       </td>
-                      <td className="px-6 py-3 text-right">
-                        <Link href={`/transport/loads/${load.id}`}
-                          className="text-xs font-medium text-blue-600 hover:text-blue-700">
-                          View Bids →
-                        </Link>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center justify-end gap-2">
+                          <Link href={`/transport/loads/${load.id}`}
+                            className="text-xs font-medium text-blue-600 hover:text-blue-700">
+                            View Bids →
+                          </Link>
+                          <DeleteLoadButton loadId={load.id} compact />
+                        </div>
                       </td>
                     </tr>
                   ))}

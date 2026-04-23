@@ -3,24 +3,29 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
 import { IndianRupee, Edit2 } from 'lucide-react'
+import { calculateTransportTotalFare, getBidRateLabel } from '@/lib/transport'
+import { formatCurrency } from '@/lib/utils'
 
 interface Props {
   loadId: string
+  quantityValue: number | null
+  quantityUnit: string
   existingBid?: { id: string; amount: number }
   isEdit?: boolean
 }
 
-export function BidModal({ loadId, existingBid, isEdit }: Props) {
+export function BidModal({ loadId, quantityValue, quantityUnit, existingBid, isEdit }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
   const [amount, setAmount] = useState(existingBid?.amount?.toString() || '')
   const [remarks, setRemarks] = useState('')
+  const totalFare = calculateTransportTotalFare(quantityValue, amount)
+  const rateLabel = getBidRateLabel(quantityUnit)
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -64,7 +69,7 @@ export function BidModal({ loadId, existingBid, isEdit }: Props) {
           </DialogHeader>
           <form onSubmit={handleSubmit} className="space-y-4 mt-2">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Your Quote (₹)</label>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Your Quote ({rateLabel})</label>
               <div className="relative">
                 <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 text-sm">₹</span>
                 <input
@@ -72,12 +77,18 @@ export function BidModal({ loadId, existingBid, isEdit }: Props) {
                   min="1"
                   step="1"
                   className="w-full h-9 pl-7 pr-3 rounded-lg border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="Enter amount"
+                  placeholder={`Enter amount in ${rateLabel}`}
                   value={amount}
                   onChange={e => setAmount(e.target.value)}
                   required
                 />
               </div>
+            </div>
+            <div className="rounded-lg border border-blue-100 bg-blue-50 px-3 py-2">
+              <p className="text-xs text-blue-700">Total Fare</p>
+              <p className="text-sm font-semibold text-blue-900">
+                {totalFare === null ? 'Enter a valid rate' : `${formatCurrency(totalFare)} for ${quantityValue ?? 0} ${quantityUnit}`}
+              </p>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Remarks (optional)</label>

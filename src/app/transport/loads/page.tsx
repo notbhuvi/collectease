@@ -6,6 +6,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Truck } from 'lucide-react'
 import Link from 'next/link'
+import { DeleteLoadButton } from '@/components/transport/delete-load-button'
+import { formatLoadQuantity } from '@/lib/transport'
 
 export default async function AllLoadsPage() {
   const supabase = await createClient()
@@ -106,7 +108,7 @@ export default async function AllLoadsPage() {
                               </td>
                               <td className="px-4 py-3">
                                 <p className="text-gray-700">{load.material}</p>
-                                <p className="text-xs text-gray-400">{load.weight}</p>
+                                <p className="text-xs text-gray-400">{formatLoadQuantity(load)}</p>
                               </td>
                               <td className="px-4 py-3 text-gray-700">{load.vehicle_type}</td>
                               <td className="px-4 py-3 text-gray-500">
@@ -122,13 +124,16 @@ export default async function AllLoadsPage() {
                                   {awarded?.transporter?.company_name || awarded?.transporter?.full_name || awarded?.transporter_id?.slice(0, 8) || '—'}
                                 </td>
                               )}
-                              <td className="px-6 py-3 text-right">
-                                <Link
-                                  href={`/transport/loads/${load.id}`}
-                                  className="text-xs font-medium text-blue-600 hover:text-blue-700"
-                                >
-                                  View Bids →
-                                </Link>
+                              <td className="px-6 py-3">
+                                <div className="flex items-center justify-end gap-2">
+                                  <Link
+                                    href={`/transport/loads/${load.id}`}
+                                    className="text-xs font-medium text-blue-600 hover:text-blue-700"
+                                  >
+                                    View Bids →
+                                  </Link>
+                                  <DeleteLoadButton loadId={load.id} compact />
+                                </div>
                               </td>
                             </tr>
                           )

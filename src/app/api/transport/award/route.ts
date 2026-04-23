@@ -3,6 +3,7 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { sendEmail, buildTransportWinnerEmail } from '@/lib/messaging'
 import { generateTransportAwardPDF } from '@/lib/pdf'
 import { getOrCreateProfileForUser } from '@/lib/profile'
+import { calculateTransportTotalFare, formatLoadQuantity, getLoadQuantity } from '@/lib/transport'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -16,10 +17,34 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json()
-  const { load_id, transporter_id, final_amount } = body
+  const { load_id, transporter_id } = body
 
-  if (!load_id || !transporter_id || !final_amount) {
+  if (!load_id || !transporter_id) {
     return NextResponse.json({ error: 'Missing fields' }, { status: 400 })
+  }
+
+  const [{ data: load }, { data: winningBid }] = await Promise.all([
+    serviceClient
+      .from('transport_loads')
+      .select('pickup_location, drop_location, material, weight, quantity_value, quantity_unit, vehicle_type, pickup_date')
+      .eq('id', load_id)
+      .single(),
+    serviceClient
+      .from('transport_bids')
+      .select('bid_amount, total_amount')
+      .eq('load_id', load_id)
+      .eq('transporter_id', transporter_id)
+      .single(),
+  ])
+
+  if (!load || !winningBid) {
+    return NextResponse.json({ error: 'Load or winning bid not found' }, { status: 404 })
+  }
+
+  const quantity = getLoadQuantity(load)
+  const totalFare = winningBid.total_amount ?? calculateTransportTotalFare(quantity.quantityValue, winningBid.bid_amount)
+  if (totalFare === null) {
+    return NextResponse.json({ error: 'Unable to calculate total fare' }, { status: 400 })
   }
 
   // Insert awarded_loads record
@@ -29,7 +54,7 @@ export async function POST(request: Request) {
       {
         load_id,
         transporter_id,
-        final_amount: Number(final_amount),
+        final_amount: Number(totalFare),
         awarded_by: user.id,
         awarded_at: new Date().toISOString(),
       },
@@ -45,12 +70,7 @@ export async function POST(request: Request) {
 
   // Fetch load details + winner profile for email/PDF
   try {
-    const [{ data: load }, { data: winner }] = await Promise.all([
-      serviceClient
-        .from('transport_loads')
-        .select('pickup_location, drop_location, material, weight, vehicle_type, pickup_date')
-        .eq('id', load_id)
-        .single(),
+    const [{ data: winner }] = await Promise.all([
       serviceClient
         .from('profiles')
         .select('email, full_name, company_name')
@@ -59,15 +79,24 @@ export async function POST(request: Request) {
     ])
 
     if (load && winner?.email) {
-      const loadIdShort = load_id.slice(0, 8).toUpperCase()
-      const subject = `🏆 You Won! Load ${loadIdShort} — Award Confirmation`
+      const awardDate = new Date().toLocaleDateString('en-IN')
+      const refNumber = `SIRPL/TD/${new Date().getFullYear().toString().slice(-2)}-${new Date().getFullYear().toString().slice(-2)}/${load_id.slice(0, 8).toUpperCase()}`
+      const quantityText = formatLoadQuantity(load)
+      const rateText = `Rs. ${Number(winningBid.bid_amount).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}/${quantity.quantityUnit}`
+      const totalFareText = `Rs. ${Number(totalFare).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+      const subject = `Work Order - ${load.pickup_location} to ${load.drop_location}`
       const body = buildTransportWinnerEmail({
         transporterName: winner.company_name || winner.full_name || 'Transporter',
-        loadId: loadIdShort,
+        transporterEmail: winner.email,
+        refNumber,
+        date: awardDate,
         pickup: load.pickup_location,
         drop: load.drop_location,
         material: load.material,
-        finalAmount: Number(final_amount),
+        quantity: quantityText,
+        vehicleType: load.vehicle_type,
+        rate: rateText,
+        totalFare: totalFareText,
         pickupDate: load.pickup_date,
       })
 
@@ -75,27 +104,40 @@ export async function POST(request: Request) {
       let pdfAttachment: { name: string; base64: string } | undefined
       try {
         const pdfBuffer = await generateTransportAwardPDF({
-          loadId: loadIdShort,
+          refNumber,
+          date: awardDate,
           pickup: load.pickup_location,
           drop: load.drop_location,
           material: load.material,
-          weight: load.weight,
+          quantity: quantityText,
           vehicleType: load.vehicle_type,
-          finalAmount: Number(final_amount),
           transporterName: winner.company_name || winner.full_name || 'Transporter',
+          transporterEmail: winner.email,
           pickupDate: load.pickup_date,
-          awardedAt: new Date().toISOString(),
+          rate: rateText,
+          totalFare: totalFareText,
         })
         pdfAttachment = {
-          name: `SIRPL-Award-${loadIdShort}.pdf`,
+          name: `SIRPL-Work-Order-${load_id.slice(0, 8).toUpperCase()}.pdf`,
           base64: Buffer.from(pdfBuffer).toString('base64'),
         }
       } catch (pdfErr) {
         console.error('PDF generation failed:', pdfErr)
       }
 
-      // Send winner email (fire-and-forget)
-      sendEmail(winner.email, subject, body, 'friendly', pdfAttachment).catch(console.error)
+      const emailResult = await sendEmail(
+        winner.email,
+        subject,
+        body,
+        'friendly',
+        pdfAttachment,
+        undefined,
+        { department: 'transport' }
+      )
+
+      if (!emailResult.success) {
+        console.error('Winner email failed:', emailResult.error)
+      }
     }
   } catch (emailErr) {
     console.error('Winner email failed:', emailErr)

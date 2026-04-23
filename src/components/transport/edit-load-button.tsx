@@ -7,6 +7,7 @@ import { Input } from '@/components/ui/input'
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { useToast } from '@/components/ui/toast'
 import { Edit2 } from 'lucide-react'
+import { TRANSPORT_QUANTITY_UNITS, getLoadQuantity, formatQuantityValue } from '@/lib/transport'
 
 interface Props {
   load: {
@@ -15,6 +16,8 @@ interface Props {
     drop_location: string
     material: string
     weight: string
+    quantity_value?: number | null
+    quantity_unit?: string | null
     vehicle_type: string
     pickup_date: string
     bidding_deadline: string
@@ -36,11 +39,13 @@ export function EditLoadButton({ load }: Props) {
   const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const initialQuantity = getLoadQuantity(load)
   const [form, setForm] = useState({
     pickup_location: load.pickup_location,
     drop_location: load.drop_location,
     material: load.material,
-    weight: load.weight,
+    quantity_value: formatQuantityValue(initialQuantity.quantityValue),
+    quantity_unit: initialQuantity.quantityUnit,
     vehicle_type: load.vehicle_type,
     pickup_date: load.pickup_date,
     bidding_deadline: toDateTimeLocal(load.bidding_deadline),
@@ -101,7 +106,28 @@ export function EditLoadButton({ load }: Props) {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <Input label="Material" value={form.material} onChange={e => update('material', e.target.value)} required />
-              <Input label="Weight / Quantity" value={form.weight} onChange={e => update('weight', e.target.value)} required />
+              <Input
+                label="Quantity"
+                type="number"
+                min="0.01"
+                step="0.01"
+                value={form.quantity_value}
+                onChange={e => update('quantity_value', e.target.value)}
+                required
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">Quantity Unit</label>
+              <select
+                className="w-full h-9 rounded-lg border border-gray-300 px-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                value={form.quantity_unit}
+                onChange={e => update('quantity_unit', e.target.value)}
+                required
+              >
+                {TRANSPORT_QUANTITY_UNITS.map(unit => (
+                  <option key={unit} value={unit}>{unit}</option>
+                ))}
+              </select>
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Vehicle Type</label>

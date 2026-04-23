@@ -20,6 +20,8 @@ export interface TransportLoad {
   drop_location: string
   material: string
   weight: string
+  quantity_value?: number | null
+  quantity_unit?: string | null
   vehicle_type: string
   pickup_date: string
   bidding_deadline: string
@@ -37,6 +39,7 @@ export interface TransportBid {
   load_id: string
   transporter_id: string
   bid_amount: number
+  total_amount?: number | null
   remarks: string | null
   created_at: string
   updated_at: string

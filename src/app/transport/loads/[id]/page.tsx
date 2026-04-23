@@ -11,6 +11,7 @@ import { EditBidButton } from '@/components/transport/edit-bid-button'
 import { DeleteLoadButton } from '@/components/transport/delete-load-button'
 import { EditLoadButton } from '@/components/transport/edit-load-button'
 import { MapPin, Package, Truck, Calendar, Clock, IndianRupee, Medal } from 'lucide-react'
+import { calculateTransportTotalFare, formatLoadQuantity, getBidRateLabel, getLoadQuantity } from '@/lib/transport'
 
 interface TransporterProfile {
   id: string
@@ -86,6 +87,9 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     transporter: profileMap.get(b.transporter_id) ?? null,
   }))
   const lowestBid = allBids[0]
+  const quantity = getLoadQuantity(load)
+  const quantityText = formatLoadQuantity(load)
+  const rateLabel = getBidRateLabel(quantity.quantityUnit)
   const deadlinePassed = new Date(load.bidding_deadline) < new Date()
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
@@ -129,7 +133,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
             {[
               { icon: MapPin, label: 'From', value: load.pickup_location },
               { icon: MapPin, label: 'To', value: load.drop_location },
-              { icon: Package, label: 'Material', value: `${load.material} · ${load.weight}` },
+              { icon: Package, label: 'Material', value: `${load.material} · ${quantityText}` },
               { icon: Truck, label: 'Vehicle', value: load.vehicle_type },
               { icon: Calendar, label: 'Pickup Date', value: new Date(load.pickup_date).toLocaleDateString('en-IN') },
               { icon: Clock, label: 'Bid Deadline', value: new Date(load.bidding_deadline).toLocaleString('en-IN') },
@@ -183,7 +187,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                 {lowestBid && (
                   <span className="text-xs text-gray-500">
                     Lowest:{' '}
-                    <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)}</span>
+                    <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)} {rateLabel}</span>
                   </span>
                 )}
               </div>
@@ -201,7 +205,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       <tr className="border-b border-gray-100 bg-gray-50">
                         <th className="text-center text-xs font-medium text-gray-500 px-3 py-3 w-12">Rank</th>
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Transporter</th>
-                        <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Bid Amount</th>
+                        <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Bid Rate</th>
+                        <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Total Fare</th>
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Remarks</th>
                         <th className="text-left text-xs font-medium text-gray-500 px-4 py-3">Submitted</th>
                         <th className="text-right text-xs font-medium text-gray-500 px-4 py-3">Actions</th>
@@ -211,6 +216,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                       {allBids.map((bid, index) => {
                         const transporter = bid.transporter as TransporterProfile | null
                         const isLowest = index === 0
+                        const totalFare = calculateTransportTotalFare(quantity.quantityValue, bid.bid_amount)
                         return (
                           <tr key={bid.id} className={`hover:bg-gray-50 ${isLowest ? 'bg-green-50/50' : ''}`}>
                             <td className="px-3 py-3 text-center">
@@ -236,7 +242,10 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                               </div>
                             </td>
                             <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                              {formatCurrency(bid.bid_amount)}
+                              {formatCurrency(bid.bid_amount)} {rateLabel}
+                            </td>
+                            <td className="px-4 py-3 text-right font-semibold text-gray-700">
+                              {totalFare === null ? '—' : formatCurrency(totalFare)}
                             </td>
                             <td className="px-4 py-3 text-gray-500 max-w-[160px] truncate">
                               {bid.remarks || '—'}
@@ -256,12 +265,16 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                                       currentAmount={bid.bid_amount}
                                       currentRemarks={bid.remarks || ''}
                                       transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                      quantityValue={quantity.quantityValue}
+                                      quantityUnit={quantity.quantityUnit}
                                     />
                                     <AwardBidButton
                                       loadId={load.id}
                                       transporterId={bid.transporter_id}
-                                      bidAmount={bid.bid_amount}
+                                      bidRate={bid.bid_amount}
+                                      totalFare={totalFare ?? bid.bid_amount}
                                       transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                      rateLabel={rateLabel}
                                     />
                                   </>
                                 )}
