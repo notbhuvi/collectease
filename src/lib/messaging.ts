@@ -187,6 +187,8 @@ interface NewLoadEmailCtx {
   biddingDeadline: string
 }
 
+interface UpdatedLoadEmailCtx extends NewLoadEmailCtx {}
+
 export function buildNewLoadEmail(ctx: NewLoadEmailCtx): string {
   const deadline = new Date(ctx.biddingDeadline).toLocaleString('en-IN', {
     day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
@@ -213,6 +215,36 @@ Bid Deadline:    ${deadline}
 Please log in to the SIRPL Transporter Portal to submit your bid before the deadline.
 
 Note: Bids submitted after the deadline will not be accepted.
+
+Regards,
+SIRPL Transport Department
+Samwha India Refractories Pvt. Ltd.`
+}
+
+export function buildUpdatedLoadEmail(ctx: UpdatedLoadEmailCtx): string {
+  const deadline = new Date(ctx.biddingDeadline).toLocaleString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit',
+  })
+  const pickup = new Date(ctx.pickupDate).toLocaleDateString('en-IN', {
+    day: '2-digit', month: 'short', year: 'numeric',
+  })
+
+  return `Dear Transporter,
+
+An existing freight load on the SIRPL Transport Portal has been modified during the active bidding period.
+
+Updated Load Details:
+━━━━━━━━━━━━━━━━━━━━━━
+Load ID:         ${ctx.loadId}
+Route:           ${ctx.pickup} → ${ctx.drop}
+Material:        ${ctx.material}
+Weight:          ${ctx.weight}
+Vehicle Type:    ${ctx.vehicleType}
+Pickup Date:     ${pickup}
+Bid Deadline:    ${deadline}
+━━━━━━━━━━━━━━━━━━━━━━
+
+Please log in to the SIRPL Transporter Portal to review the updated load details and revise your bid if required before the deadline.
 
 Regards,
 SIRPL Transport Department

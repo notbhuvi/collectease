@@ -1,5 +1,4 @@
-import { createServiceClient } from '@/lib/supabase/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect, notFound } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -10,7 +9,15 @@ import { CloseLoadButton } from '@/components/transport/close-load-button'
 import { DeleteBidButton } from '@/components/transport/delete-bid-button'
 import { EditBidButton } from '@/components/transport/edit-bid-button'
 import { DeleteLoadButton } from '@/components/transport/delete-load-button'
+import { EditLoadButton } from '@/components/transport/edit-load-button'
 import { MapPin, Package, Truck, Calendar, Clock, IndianRupee, Medal } from 'lucide-react'
+
+interface TransporterProfile {
+  id: string
+  full_name: string | null
+  company_name: string | null
+  email: string | null
+}
 
 export default async function LoadDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
@@ -57,32 +64,21 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
     .eq('load_id', id)
     .order('bid_amount', { ascending: true })
 
-  // Batch-fetch all transporter profiles in one query
-  // Uses supabase (user-auth client) — "team_admin_read_profiles" RLS policy grants access.
-  // Falls back to serviceClient if the regular client returns nothing.
+  // Batch-fetch all transporter profiles in one query via service role so the
+  // leaderboard keeps working even when RLS is tightened.
   const bidList = rawBids || []
   const transporterIds = [...new Set(bidList.map(b => b.transporter_id).filter(Boolean))]
 
-  let transporterProfiles: any[] = []
+  let transporterProfiles: TransporterProfile[] = []
   if (transporterIds.length > 0) {
-    const { data: regularProfiles } = await supabase
+    const { data: svcProfiles } = await serviceClient
       .from('profiles')
       .select('id, full_name, company_name, email')
       .in('id', transporterIds)
-
-    if (regularProfiles && regularProfiles.length > 0) {
-      transporterProfiles = regularProfiles
-    } else {
-      // Fallback: service client (bypasses RLS entirely)
-      const { data: svcProfiles } = await serviceClient
-        .from('profiles')
-        .select('id, full_name, company_name, email')
-        .in('id', transporterIds)
-      transporterProfiles = svcProfiles || []
-    }
+    transporterProfiles = svcProfiles || []
   }
 
-  const profileMap = new Map(transporterProfiles.map((p: any) => [p.id, p]))
+  const profileMap = new Map(transporterProfiles.map(p => [p.id, p]))
 
   // Merge profiles into bids
   const allBids = bidList.map(b => ({
@@ -94,7 +90,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
 
-  const statusVariant: Record<string, any> = {
+  const statusVariant: Record<string, 'success' | 'secondary' | 'warning' | 'default'> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
   }
 
@@ -112,6 +108,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
         description={`Load ID: ${load.id.slice(0, 8).toUpperCase()} · Created by ${creator?.full_name || creator?.email || 'Unknown'}`}
         actions={
           <div className="flex gap-2">
+            {isOpen && <EditLoadButton load={load} />}
             {isOpen && <CloseLoadButton loadId={load.id} />}
             <DeleteLoadButton loadId={load.id} />
           </div>
@@ -212,7 +209,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {allBids.map((bid, index) => {
-                        const transporter = bid.transporter as any
+                        const transporter = bid.transporter as TransporterProfile | null
                         const isLowest = index === 0
                         return (
                           <tr key={bid.id} className={`hover:bg-gray-50 ${isLowest ? 'bg-green-50/50' : ''}`}>
