@@ -2,7 +2,7 @@
 
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { Factory, LayoutDashboard, Package2, Boxes, ClipboardList, Warehouse, ArrowRightLeft, FileSpreadsheet, Upload, Settings, LogOut, Menu, X } from 'lucide-react'
+import { Factory, LayoutDashboard, Package2, Boxes, ClipboardList, Warehouse, ArrowRightLeft, FileSpreadsheet, Settings, LogOut, Menu, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { createClient } from '@/lib/supabase/client'
 import { useState } from 'react'
@@ -34,7 +34,6 @@ const sections = [
   {
     title: '',
     items: [
-      { href: '/plant/import', label: 'Import Data', icon: Upload },
       { href: '/plant/reports', label: 'Reports', icon: FileSpreadsheet },
       { href: '/plant/settings', label: 'Settings', icon: Settings },
     ],

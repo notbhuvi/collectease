@@ -55,14 +55,9 @@ export default async function PlantPage() {
         title="Plant & Warehouse Dashboard"
         description="Combined production, stock, dispatch, and warehouse control center."
         actions={
-          <div className="flex gap-2">
-            <Link href="/plant/import" className="inline-flex items-center rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-700 shadow-sm ring-1 ring-gray-200 transition hover:bg-gray-50">
-              Import Data
-            </Link>
-            <Link href="/plant/production" className="inline-flex items-center rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-700">
-              Add Production
-            </Link>
-          </div>
+          <Link href="/plant/production" className="inline-flex items-center rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white transition hover:bg-cyan-700">
+            Add Production
+          </Link>
         }
       />
 
