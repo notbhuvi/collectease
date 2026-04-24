@@ -513,91 +513,174 @@ export async function generateTransportAwardPDF(info: TransportAwardInfo): Promi
   const w = doc.internal.pageSize.getWidth()
   const h = doc.internal.pageSize.getHeight()
   const margin = 16
+  const contentLeft = 24
+  const contentRight = w - 24
+  const contentWidth = contentRight - contentLeft
+  const footerTop = h - 24
+  const contentBottom = footerTop - 16
+  const signatureTop = footerTop - 34
   const logo = getLogoBase64()
+  let pageNumber = 1
+  const bodyFontSize = 10.5
+  const bodyLineHeight = 5
+  const paragraphGap = 5
+  const clauseGap = 4
 
   function drawWorkOrderHeader(pageNumber: number) {
-    if (logo) {
-      doc.addImage(logo, 'PNG', margin, 8, 18, 18)
-    }
-    doc.setFont('helvetica', 'bold')
-    doc.setFontSize(21)
-    doc.setTextColor(220, 38, 38)
-    doc.text('SAMWHA INDIA REFRACTORIES PVT. LTD.', w / 2, 14, { align: 'center' })
-    doc.setFontSize(10)
-    doc.setTextColor(17, 24, 39)
-    doc.text('D/192, Koel Nagar, Rourkela-769014, Odisha, India', w / 2, 20, { align: 'center' })
-    doc.text(`Email: ${TRANSPORT_DEPARTMENT_EMAILS[1]}  Mobile: ${TRANSPORT_DEPARTMENT_MOBILE}`, w / 2, 26, { align: 'center' })
     doc.setDrawColor(37, 99, 235)
-    doc.setLineWidth(0.8)
-    doc.line(margin, 31, w - margin, 31)
-    doc.line(margin, 32.5, w - margin, 32.5)
+    doc.setLineWidth(0.7)
+    doc.line(margin, 10, w - margin, 10)
+
+    if (logo) {
+      doc.addImage(logo, 'PNG', margin + 2, 13, 16, 16)
+    }
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(20)
+    doc.setTextColor(220, 38, 38)
+    doc.text('SAMWHA INDIA REFRACTORIES PVT. LTD.', w / 2, 18, { align: 'center' })
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(10.5)
+    doc.setTextColor(17, 24, 39)
+    doc.text('D/192, Koel Nagar, Rourkela-769014, Odisha, India', w / 2, 24, { align: 'center' })
+    doc.text(`Email: ${TRANSPORT_DEPARTMENT_EMAILS[1]}   Mobile: ${TRANSPORT_DEPARTMENT_MOBILE}`, w / 2, 29.5, { align: 'center' })
+    doc.line(margin, 35, w - margin, 35)
+    doc.line(margin, 36.5, w - margin, 36.5)
+
+    doc.setFont('helvetica', 'bold')
+    doc.setFontSize(15)
+    doc.text('WORK ORDER', w / 2, 45, { align: 'center' })
 
     doc.setFont('helvetica', 'normal')
-    doc.setFontSize(11)
+    doc.setFontSize(10.5)
     doc.setTextColor(17, 24, 39)
-    doc.text(`Ref: ${info.refNumber}`, 34, 44)
-    doc.text(`Date: ${info.date}`, w - 34, 44, { align: 'right' })
+    doc.text(`Ref: ${info.refNumber}`, contentLeft, 53)
+    doc.text(`Date: ${info.date}`, contentRight, 53, { align: 'right' })
     if (pageNumber > 1) {
-      doc.text(`Page : ${pageNumber}`, w / 2, 50, { align: 'center' })
+      doc.text(`Page ${pageNumber}`, w / 2, 53, { align: 'center' })
     }
+    doc.line(contentLeft, 57, contentRight, 57)
   }
 
   function drawWorkOrderFooter() {
     doc.setDrawColor(37, 99, 235)
     doc.setLineWidth(0.8)
-    doc.line(margin, h - 24, w - margin, h - 24)
-    doc.line(margin, h - 22.5, w - margin, h - 22.5)
+    doc.line(margin, footerTop, w - margin, footerTop)
+    doc.line(margin, footerTop + 1.5, w - margin, footerTop + 1.5)
+
+    const leftCenter = margin + (w - 2 * margin) * 0.22
+    const rightCenter = w - margin - (w - 2 * margin) * 0.12
+
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(9)
-    doc.setTextColor(17, 24, 39)
-    doc.text('SIRPL TRANSPORT DEPARTMENT', margin + 20, h - 16)
-    doc.text('CONTACT', w - margin - 20, h - 16, { align: 'center' })
-    doc.setFont('helvetica', 'normal')
     doc.setFontSize(8.5)
-    doc.text('Samwha India Refractories Pvt. Ltd.', margin + 20, h - 11, { align: 'center' })
-    doc.text(`${TRANSPORT_DEPARTMENT_EMAILS.join(' / ')}`, w - margin - 20, h - 11, { align: 'center' })
-    doc.text('Rourkela, Odisha, India', margin + 20, h - 6, { align: 'center' })
-    doc.text(TRANSPORT_DEPARTMENT_MOBILE, w - margin - 20, h - 6, { align: 'center' })
+    doc.setTextColor(17, 24, 39)
+    doc.text('SIRPL TRANSPORT DEPARTMENT', leftCenter, h - 16, { align: 'center' })
+    doc.text('CONTACT', rightCenter, h - 16, { align: 'center' })
+
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(8)
+    doc.text('Samwha India Refractories Pvt. Ltd.', leftCenter, h - 11, { align: 'center' })
+    doc.text(`${TRANSPORT_DEPARTMENT_EMAILS.join(' / ')}`, rightCenter, h - 11, { align: 'center' })
+    doc.text('Rourkela, Odisha, India', leftCenter, h - 6, { align: 'center' })
+    doc.text(TRANSPORT_DEPARTMENT_MOBILE, rightCenter, h - 6, { align: 'center' })
   }
 
   function addClause(index: number, title: string, text: string, startY: number) {
+    const titleX = contentLeft + 18
+    const bodyY = startY + bodyLineHeight
+
     doc.setFont('helvetica', 'bold')
-    doc.setFontSize(10)
-    doc.text(`${String(index).padStart(2, '0')}.`, 18, startY)
-    doc.text(`${title}:`, 31, startY)
+    doc.setFontSize(bodyFontSize)
+    doc.text(`${String(index).padStart(2, '0')}.`, contentLeft, startY)
+    doc.text(`${title}:`, titleX, startY)
     doc.setFont('helvetica', 'normal')
-    const lines = doc.splitTextToSize(text, w - 47)
-    doc.text(lines, 31, startY + 5)
-    return startY + 5 + lines.length * 5
+    const lines = doc.splitTextToSize(text, contentWidth - 18)
+    doc.text(lines, titleX, bodyY)
+    return bodyY + lines.length * bodyLineHeight + clauseGap
   }
 
-  drawWorkOrderHeader(1)
+  function measureClauseHeight(text: string) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(bodyFontSize)
+    const lines = doc.splitTextToSize(text, contentWidth - 18)
+    return bodyLineHeight + lines.length * bodyLineHeight + clauseGap
+  }
 
-  let y = 56
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(11)
+  function addParagraph(startY: number, text: string, options?: { bold?: boolean; gapAfter?: number }) {
+    doc.setFont('helvetica', options?.bold ? 'bold' : 'normal')
+    doc.setFontSize(bodyFontSize)
+    const lines = doc.splitTextToSize(text, contentWidth)
+    doc.text(lines, contentLeft, startY)
+    return startY + lines.length * bodyLineHeight + (options?.gapAfter ?? paragraphGap)
+  }
+
+  function measureParagraphHeight(text: string, options?: { gapAfter?: number }) {
+    doc.setFont('helvetica', 'normal')
+    doc.setFontSize(bodyFontSize)
+    const lines = doc.splitTextToSize(text, contentWidth)
+    return lines.length * bodyLineHeight + (options?.gapAfter ?? paragraphGap)
+  }
+
+  function addSingleLine(startY: number, text: string, options?: { bold?: boolean; align?: 'left' | 'right' | 'center' }) {
+    doc.setFont('helvetica', options?.bold ? 'bold' : 'normal')
+    doc.setFontSize(bodyFontSize)
+    const x = options?.align === 'right' ? contentRight : options?.align === 'center' ? w / 2 : contentLeft
+    doc.text(text, x, startY, options?.align ? { align: options.align } : undefined)
+    return startY + bodyLineHeight
+  }
+
+  function startNewWorkOrderPage() {
+    drawWorkOrderFooter()
+    doc.addPage()
+    pageNumber += 1
+    drawWorkOrderHeader(pageNumber)
+    return 66
+  }
+
+  function ensureContentSpace(currentY: number, neededHeight: number) {
+    if (currentY + neededHeight <= contentBottom) return currentY
+    return startNewWorkOrderPage()
+  }
+
+  function ensureSignatureSpace(currentY: number, neededHeight: number) {
+    if (currentY + neededHeight <= signatureTop) return currentY
+    return startNewWorkOrderPage()
+  }
+
+  drawWorkOrderHeader(pageNumber)
+
+  let y = 66
   const recipientLines = [
-    'To',
+    'To,',
     info.transporterName,
     ...(info.transporterEmail ? [`Email: ${info.transporterEmail}`] : []),
   ]
   recipientLines.forEach(line => {
-    doc.text(line, 34, y)
-    y += 6
+    y = ensureContentSpace(y, bodyLineHeight)
+    y = addSingleLine(y, line)
   })
 
-  y += 4
+  y += 5
   doc.setFont('helvetica', 'bold')
-  const subject = `Sub : Work Order for Transportation of ${info.material} from ${info.pickup} to ${info.drop}`
-  const subjectLines = doc.splitTextToSize(subject, w - 68)
-  doc.text(subjectLines, 34, y)
-  y += subjectLines.length * 6 + 6
+  doc.setFontSize(11)
+  const subject = `Subject: Work Order for Transportation of ${info.material} from ${info.pickup} to ${info.drop}`
+  const subjectLines = doc.splitTextToSize(subject, contentWidth)
+  y = ensureContentSpace(y, subjectLines.length * 5.3 + 9)
+  doc.text(subjectLines, contentLeft, y)
+  y += subjectLines.length * 5.3 + 9
 
   doc.setFont('helvetica', 'normal')
-  const intro = 'Dear Sir/Madam,\n\nWith reference to your bid submitted through the SIRPL Transport Portal, we are pleased to place our work order on you for transportation of our materials as per the detailed terms and conditions given below.'
-  const introLines = doc.splitTextToSize(intro, w - 2 * margin - 18)
-  doc.text(introLines, 34, y)
-  y += introLines.length * 5 + 8
+  const introBlocks = [
+    'Dear Sir/Madam,',
+    'With reference to your quotation submitted through the SIRPL Transport Portal, we are pleased to issue this work order for transportation of our material, subject to the details, rates, and terms and conditions set out below.',
+  ]
+  introBlocks.forEach(block => {
+    y = ensureContentSpace(y, measureParagraphHeight(block, { gapAfter: paragraphGap }))
+    y = addParagraph(y, block, { gapAfter: 5 })
+  })
+
+  y += 1
 
   autoTable(doc, {
     startY: y,
@@ -605,56 +688,83 @@ export async function generateTransportAwardPDF(info: TransportAwardInfo): Promi
     body: [[
       '01',
       [
-        `Transportation charges for ${info.material} from ${info.pickup} to ${info.drop}.`,
+        `Transportation charges for ${info.material} from ${info.pickup} to ${info.drop}`,
         '',
-        `Quantity: ${info.quantity}`,
-        `Vehicle Type: ${info.vehicleType}`,
-        `Pickup Date: ${info.pickupDate}`,
-        `Rate: ${info.rate}`,
-        `Total Fare: ${info.totalFare}`,
+        `Quantity        : ${info.quantity}`,
+        `Vehicle Type    : ${info.vehicleType}`,
+        `Pickup Date     : ${info.pickupDate}`,
+        `Rate            : ${info.rate}`,
+        `Total Fare      : ${info.totalFare}`,
       ].join('\n'),
     ]],
-    margin: { left: 34, right: 28 },
-    styles: { fontSize: 10, cellPadding: 4, valign: 'top', lineColor: [107, 114, 128], lineWidth: 0.2 },
-    headStyles: { fillColor: [255, 255, 255], textColor: [17, 24, 39], fontStyle: 'bold', lineColor: [107, 114, 128] },
-    columnStyles: { 0: { cellWidth: 28, halign: 'center', fontStyle: 'bold' }, 1: { cellWidth: 'auto' } },
+    margin: { left: contentLeft, right: w - contentRight },
+    styles: {
+      fontSize: 10,
+      cellPadding: { top: 4, right: 5, bottom: 4, left: 5 },
+      valign: 'top',
+      textColor: [31, 41, 55],
+      lineColor: [148, 163, 184],
+      lineWidth: 0.25,
+    },
+    headStyles: {
+      fillColor: [241, 245, 249],
+      textColor: [17, 24, 39],
+      fontStyle: 'bold',
+      halign: 'left',
+      lineColor: [148, 163, 184],
+      lineWidth: 0.3,
+    },
+    bodyStyles: { fillColor: [255, 255, 255] },
+    columnStyles: {
+      0: { cellWidth: 24, halign: 'center', fontStyle: 'bold' },
+      1: { cellWidth: contentWidth - 24 },
+    },
   })
 
-  y = (doc as any).lastAutoTable.finalY + 8
-  y = addClause(1, 'Validity of Rate', 'The above rate is applicable for this awarded load unless otherwise agreed in writing by both parties.', y)
-  y = addClause(2, 'Manpower', 'You will arrange the required manpower for loading or unloading wherever needed at your scope unless otherwise approved by SIRPL in writing.', y + 4)
+  y = (doc as any).lastAutoTable.finalY + 9
+  const clauses = [
+    [1, 'Validity of Rate', 'The above rate is applicable for this awarded load unless otherwise agreed in writing by both parties.'],
+    [2, 'Manpower', 'You will arrange the required manpower for loading or unloading wherever needed at your scope unless otherwise approved by SIRPL in writing.'],
+    [3, 'Placing of Trucks', 'You shall place the required vehicle at the loading point on time as per our instruction. Any delay causing operational loss may be recovered from your account.'],
+    [4, 'Statutory Acts & Rules', 'You shall comply with all applicable statutory acts, transport rules, safety rules and government requirements during movement of the material.'],
+    [5, 'Payment', 'You shall submit your bill with the receipted challan, proof of delivery and supporting documents for payment processing.'],
+    [6, 'Billing Quantity', `Billing will be considered on the actual dispatched and accepted quantity for this load. The awarded rate is ${info.rate}.`],
+    [7, 'Delivery of Invoice Quantity', 'You will be responsible for safe and complete delivery of the awarded quantity to the destination. Any shortage or damage may be recovered from your bill.'],
+    [8, 'T.D.S.', 'TDS will be deducted as per applicable government rules.'],
+    [9, 'Taxes', 'Applicable taxes will be handled as per statutory provisions and the supporting registration details provided by you.'],
+    [10, 'Special Note', 'You will be responsible for damage, shortage or loss of material from loading point to unloading point during transit.'],
+  ] as const
 
-  drawWorkOrderFooter()
+  clauses.forEach(([index, title, text], clauseIndex) => {
+    const gapBefore = clauseIndex === 0 ? 0 : 3
+    y = ensureContentSpace(y + gapBefore, measureClauseHeight(text))
+    y = addClause(index, title, text, y)
+  })
 
-  doc.addPage()
-  drawWorkOrderHeader(2)
-  y = 56
+  y += 6
+  const closingBlocks = [
+    'This work order shall remain subject to satisfactory performance and compliance with the above terms. SIRPL reserves the right to cancel the work order in the event of non-performance or any breach of the stated conditions.',
+    'You are requested to acknowledge receipt of this work order and confirm your acceptance.',
+    'Thanking you,',
+    'Yours faithfully,',
+  ]
+  closingBlocks.forEach(block => {
+    y = ensureContentSpace(y, measureParagraphHeight(block, { gapAfter: 6 }))
+    y = addParagraph(y, block, { gapAfter: 6 })
+  })
 
-  y = addClause(3, 'Placing of Trucks', 'You shall place the required vehicle at the loading point on time as per our instruction. Any delay causing operational loss may be recovered from your account.', y)
-  y = addClause(4, 'Statutory Acts & Rules', 'You shall comply with all applicable statutory acts, transport rules, safety rules and government requirements during movement of the material.', y + 4)
-  y = addClause(5, 'Payment', 'You shall submit your bill with the receipted challan, proof of delivery and supporting documents for payment processing.', y + 4)
-  y = addClause(6, 'Billing Quantity', `Billing will be considered on the actual dispatched and accepted quantity for this load. The awarded rate is ${info.rate}.`, y + 4)
-  y = addClause(7, 'Delivery of Invoice Quantity', 'You will be responsible for safe and complete delivery of the awarded quantity to the destination. Any shortage or damage may be recovered from your bill.', y + 4)
-  y = addClause(8, 'T.D.S.', 'TDS will be deducted as per applicable government rules.', y + 4)
-  y = addClause(9, 'Taxes', 'Applicable taxes will be handled as per statutory provisions and the supporting registration details provided by you.', y + 4)
-  y = addClause(10, 'Special Note', 'You will be responsible for damage, shortage or loss of material from loading point to unloading point during transit.', y + 4)
-
-  y += 10
-  doc.setFont('helvetica', 'normal')
-  doc.setFontSize(11)
-  const closingLines = doc.splitTextToSize(
-    'We reserve the right to cancel this work order in case of non-performance or failure to comply with the above terms.\n\nPlease acknowledge and confirm acceptance of this work order.\n\nThanking you,\n\nYours faithfully,',
-    w - 2 * margin - 18
-  )
-  doc.text(closingLines, 34, y)
-  y += closingLines.length * 5 + 10
+  y += 8
+  y = ensureSignatureSpace(y, 26)
 
   doc.setFont('helvetica', 'bold')
-  doc.text(`For ${TRANSPORT_DEPARTMENT_NAME}`, 34, y)
-  doc.text(info.transporterName, w - 40, y, { align: 'right' })
-  y += 18
-  doc.text('Authorised Signatory', 34, y)
-  doc.text('Authorised Signatory', w - 40, y, { align: 'right' })
+  doc.text(`For ${TRANSPORT_DEPARTMENT_NAME}`, contentLeft, y)
+  doc.text(info.transporterName, contentRight, y, { align: 'right' })
+  y += 14
+  doc.line(contentLeft, y, contentLeft + 52, y)
+  doc.line(contentRight - 52, y, contentRight, y)
+  y += 5.5
+  doc.text('Authorised Signatory', contentLeft, y)
+  doc.text('Authorised Signatory', contentRight, y, { align: 'right' })
 
   drawWorkOrderFooter()
   return doc.output('arraybuffer')

@@ -1,4 +1,5 @@
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getOrCreateProfileForUser } from '@/lib/profile'
 import { redirect, notFound } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -27,6 +28,7 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   if (!user) redirect('/auth/login')
 
   const serviceClient = await createServiceClient()
+  const viewerProfile = await getOrCreateProfileForUser(serviceClient, user, 'id,email,role')
 
   // Fetch load and bids separately to avoid nested join issues
   const { data: load, error: loadError } = await serviceClient
@@ -93,6 +95,8 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
   const deadlinePassed = new Date(load.bidding_deadline) < new Date()
   const isOpen = load.status === 'open'
   const isAwarded = load.status === 'awarded'
+  const isAdmin = viewerProfile?.role === 'admin'
+  const canDeleteBids = isAdmin || (isOpen && !deadlinePassed)
 
   const statusVariant: Record<string, 'success' | 'secondary' | 'warning' | 'default'> = {
     open: 'success', closed: 'secondary', awarded: 'warning', completed: 'default',
@@ -184,12 +188,19 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                   <Medal className="h-4 w-4 text-orange-500" />
                   Leaderboard — Bids Received ({allBids.length})
                 </CardTitle>
-                {lowestBid && (
-                  <span className="text-xs text-gray-500">
-                    Lowest:{' '}
-                    <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)} {rateLabel}</span>
-                  </span>
-                )}
+                <div className="flex items-center gap-3">
+                  {!canDeleteBids && allBids.length > 0 && (
+                    <span className="text-xs text-gray-500">
+                      Bid history is locked after the bidding deadline for non-admin users.
+                    </span>
+                  )}
+                  {lowestBid && (
+                    <span className="text-xs text-gray-500">
+                      Lowest:{' '}
+                      <span className="font-semibold text-green-600">{formatCurrency(lowestBid.bid_amount)} {rateLabel}</span>
+                    </span>
+                  )}
+                </div>
               </div>
             </CardHeader>
             <CardContent className="p-0">
@@ -278,7 +289,12 @@ export default async function LoadDetailPage({ params }: { params: Promise<{ id:
                                     />
                                   </>
                                 )}
-                                <DeleteBidButton bidId={bid.id} transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'} />
+                                {canDeleteBids && (
+                                  <DeleteBidButton
+                                    bidId={bid.id}
+                                    transporterName={transporter?.company_name || transporter?.full_name || 'Unknown'}
+                                  />
+                                )}
                               </div>
                             </td>
                           </tr>

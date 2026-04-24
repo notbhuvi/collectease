@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -7,13 +7,17 @@ import { formatCurrency } from '@/lib/utils'
 import { FileText, Trophy, Clock } from 'lucide-react'
 import { calculateTransportTotalFare, formatLoadQuantity, getBidRateLabel, getLoadQuantity } from '@/lib/transport'
 
+export const dynamic = 'force-dynamic'
+
 export default async function MyBidsPage() {
   const supabase = await createClient()
+  const serviceClient = await createServiceClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  // Fetch bids plain — no nested joins (they fail silently in Supabase PostgREST)
-  const { data: rawBids } = await supabase
+  // Use the service client so bid history remains visible even after the
+  // related load is no longer open under transporter RLS.
+  const { data: rawBids } = await serviceClient
     .from('transport_bids')
     .select('*')
     .eq('transporter_id', user.id)
@@ -24,7 +28,7 @@ export default async function MyBidsPage() {
   // Batch-fetch the loads for these bids
   const loadIds = [...new Set(rawBidList.map(b => b.load_id).filter(Boolean))]
   const { data: loadRows } = loadIds.length > 0
-    ? await supabase.from('transport_loads')
+    ? await serviceClient.from('transport_loads')
         .select('id, pickup_location, drop_location, material, vehicle_type, pickup_date, bidding_deadline, status, weight, quantity_value, quantity_unit')
         .in('id', loadIds)
     : { data: [] }
@@ -33,7 +37,7 @@ export default async function MyBidsPage() {
 
   // Fetch awarded info for these loads
   const { data: awardedRows } = loadIds.length > 0
-    ? await supabase.from('awarded_loads')
+    ? await serviceClient.from('awarded_loads')
         .select('load_id, transporter_id, final_amount')
         .in('load_id', loadIds)
     : { data: [] }

@@ -1,6 +1,8 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
-import { createClient as createSupabaseClient } from '@supabase/supabase-js'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -19,19 +21,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Incorrect password' }, { status: 401 })
   }
 
-  // Get business
-  const { data: business } = await supabase
-    .from('businesses').select('id').eq('user_id', user.id).single()
+  const service = await createServiceClient()
+  const profile = await getProfileForUser(service, user, 'role')
+  const business = await getAccessibleBusinessForUser(service, user, profile?.role as UserRole)
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
   const bId = business.id
-
-  // Use service role to delete everything — bypasses RLS cascade issues
-  const service = createSupabaseClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.SUPABASE_SERVICE_ROLE_KEY!,
-    { auth: { persistSession: false } }
-  )
 
   // Delete in dependency order
   await service.from('escalation_logs').delete().eq('business_id', bId)

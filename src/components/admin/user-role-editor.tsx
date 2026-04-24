@@ -7,13 +7,14 @@ import { useToast } from '@/components/ui/toast'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { UserRole } from '@/types'
 
-const roles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter']
+const roles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops']
 
 const roleColors: Record<string, string> = {
   admin: 'bg-violet-100 text-violet-700',
   accounts: 'bg-blue-100 text-blue-700',
   transport_team: 'bg-orange-100 text-orange-700',
   transporter: 'bg-emerald-100 text-emerald-700',
+  plant_ops: 'bg-cyan-100 text-cyan-700',
 }
 
 interface Props {

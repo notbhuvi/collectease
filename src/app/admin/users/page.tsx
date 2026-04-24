@@ -6,6 +6,7 @@ import { UserRoleEditor } from '@/components/admin/user-role-editor'
 import { DeleteUserButton } from '@/components/admin/delete-user-button'
 import Link from 'next/link'
 import { UserPlus } from 'lucide-react'
+import { getAdminUserDirectory } from '@/lib/admin-users'
 
 export default async function AdminUsersPage() {
   const supabase = await createClient()
@@ -14,12 +15,7 @@ export default async function AdminUsersPage() {
 
   const serviceClient = await createServiceClient()
   // Order by email — avoids failures if created_at column doesn't exist in profiles
-  const { data: users, error } = await serviceClient
-    .from('profiles')
-    .select('*')
-    .order('email', { ascending: true })
-
-  const allUsers = users || []
+  const allUsers = await getAdminUserDirectory(serviceClient)
 
   return (
     <div>
@@ -35,12 +31,6 @@ export default async function AdminUsersPage() {
           </Link>
         }
       />
-
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-sm text-red-600">
-          Error loading users: {error.message}
-        </div>
-      )}
 
       <Card>
         <CardHeader><CardTitle>All Users ({allUsers.length})</CardTitle></CardHeader>

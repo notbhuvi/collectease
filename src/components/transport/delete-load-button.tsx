@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { Trash2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 
-export function DeleteLoadButton({ loadId }: { loadId: string }) {
+export function DeleteLoadButton({ loadId, compact = false }: { loadId: string; compact?: boolean }) {
   const [loading, setLoading] = useState(false)
   const router = useRouter()
 
@@ -31,13 +31,14 @@ export function DeleteLoadButton({ loadId }: { loadId: string }) {
   return (
     <Button
       variant="ghost"
-      size="sm"
+      size={compact ? 'icon' : 'sm'}
       onClick={handleDelete}
       disabled={loading}
-      className="text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200"
+      className={`text-red-500 hover:text-red-700 hover:bg-red-50 border border-red-200 ${compact ? 'h-8 w-8 p-0' : ''}`}
+      title="Delete load"
     >
-      <Trash2 className="h-4 w-4 mr-1" />
-      {loading ? 'Deleting…' : 'Delete Load'}
+      <Trash2 className={`h-4 w-4 ${compact ? '' : 'mr-1'}`} />
+      {!compact && (loading ? 'Deleting…' : 'Delete Load')}
     </Button>
   )
 }

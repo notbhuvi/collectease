@@ -3,6 +3,9 @@ import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { buildReminderMessage, sendEmail, getReminderType } from '@/lib/messaging'
 import { generateReminderPDF } from '@/lib/pdf'
 import { getDaysOverdue } from '@/lib/utils'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
@@ -11,8 +14,12 @@ export async function POST(request: Request) {
 
   const body = await request.json()
   const { invoiceId } = body
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
+  if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const { data: invoice } = await supabase
+  const { data: invoice } = await serviceClient
     .from('invoices')
     .select(`
       *,
@@ -23,7 +30,7 @@ export async function POST(request: Request) {
     .single()
 
   if (!invoice) return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
-  if (invoice.business.user_id !== user.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
+  if (invoice.business.id !== business.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 403 })
   if (invoice.status === 'paid' || invoice.status === 'cancelled') {
     return NextResponse.json({ error: 'Cannot send reminder for paid/cancelled invoice' }, { status: 400 })
   }
@@ -102,8 +109,6 @@ export async function POST(request: Request) {
     )
   }
 
-  const serviceClient = await createServiceClient()
-
   await serviceClient.from('reminders').insert({
     invoice_id: invoiceId,
     business_id: invoice.business.id,
@@ -128,15 +133,16 @@ export async function GET(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: business } = await supabase
-    .from('businesses').select('id').eq('user_id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
   const { searchParams } = new URL(request.url)
   const invoiceId = searchParams.get('invoiceId')
 
-  let query = supabase
+  let query = serviceClient
     .from('reminders')
     .select('*')
     .eq('business_id', business.id)

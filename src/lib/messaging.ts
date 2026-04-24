@@ -123,17 +123,21 @@ function getSenderConfig(department: EmailDepartment = 'accounts') {
     BREVO_FROM_NAME,
     BREVO_FROM_EMAIL,
     EMAIL_FROM,
+    TRANSPORT_EMAIL_FROM,
+    TRANSPORT_BREVO_FROM_EMAIL,
+    TRANSPORT_FROM_NAME,
   } = process.env
 
   const accountsEmail = BREVO_FROM_EMAIL || 'accounts@sirpl.in'
+  const transportEmail = TRANSPORT_BREVO_FROM_EMAIL || TRANSPORT_EMAIL_FROM || accountsEmail
   const senderEmail = department === 'transport'
-    ? 'jbehera@sirpl.in'
+    ? transportEmail
     : accountsEmail
   const senderName = department === 'transport'
-    ? TRANSPORT_DEPARTMENT_NAME
+    ? (TRANSPORT_FROM_NAME || TRANSPORT_DEPARTMENT_NAME)
     : (BREVO_FROM_NAME || 'SIRPL')
   const resendFrom = department === 'transport'
-    ? `${senderName} <${senderEmail}>`
+    ? (TRANSPORT_EMAIL_FROM || `${senderName} <${senderEmail}>`)
     : (EMAIL_FROM || `${senderName} <${senderEmail}>`)
 
   return {

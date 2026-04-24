@@ -1,26 +1,34 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export async function POST(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
+  if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
+
   const body = await request.json()
 
   // Get the invoice + verify ownership
-  const { data: invoice } = await supabase
+  const { data: invoice } = await serviceClient
     .from('invoices')
-    .select('id, business_id, total_amount, businesses!inner(user_id)')
+    .select('id, business_id, total_amount')
     .eq('id', body.invoice_id)
     .single()
 
-  if (!invoice || (invoice.businesses as any).user_id !== user.id) {
+  if (!invoice || invoice.business_id !== business.id) {
     return NextResponse.json({ error: 'Invoice not found' }, { status: 404 })
   }
 
   // Record payment
-  const { data: payment, error: paymentError } = await supabase
+  const { data: payment, error: paymentError } = await serviceClient
     .from('payments')
     .insert({
       invoice_id: body.invoice_id,
@@ -37,7 +45,7 @@ export async function POST(request: Request) {
   if (paymentError) return NextResponse.json({ error: paymentError.message }, { status: 500 })
 
   // Sum all payments to get running total
-  const { data: allPayments } = await supabase
+  const { data: allPayments } = await serviceClient
     .from('payments')
     .select('amount')
     .eq('invoice_id', body.invoice_id)
@@ -52,7 +60,7 @@ export async function POST(request: Request) {
     invoiceUpdate.paid_at = new Date().toISOString()
   }
 
-  const { error: updateError } = await supabase
+  const { error: updateError } = await serviceClient
     .from('invoices')
     .update(invoiceUpdate)
     .eq('id', body.invoice_id)
@@ -67,12 +75,13 @@ export async function GET() {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: business } = await supabase
-    .from('businesses').select('id').eq('user_id', user.id).single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const { data, error } = await supabase
+  const { data, error } = await serviceClient
     .from('payments')
     .select('*, invoice:invoices(invoice_number, client:clients(name))')
     .eq('business_id', business.id)

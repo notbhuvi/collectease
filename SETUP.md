@@ -50,10 +50,17 @@ Register a new account, then start adding clients and invoices.
 4. Set in `.env.local`:
    ```
    RESEND_API_KEY=re_xxxxx
-   EMAIL_FROM=CollectEase <noreply@yourdomain.com>
+   BREVO_API_KEY=your_brevo_api_key
+   EMAIL_FROM=SIRPL <accounts@sirpl.in>
+   BREVO_FROM_EMAIL=accounts@sirpl.in
+   TRANSPORT_EMAIL_FROM=SIRPL Transport Department <accounts@sirpl.in>
+   TRANSPORT_BREVO_FROM_EMAIL=accounts@sirpl.in
+   TRANSPORT_FROM_NAME=SIRPL Transport Department
    ```
 
 Without this, emails are mocked and logged to console.
+
+If you want transport notifications to come from a separate mailbox, make sure that mailbox is verified with your email provider first. Otherwise keep the transport sender pointed at the same verified `accounts@sirpl.in` address.
 
 ---
 
@@ -90,7 +97,13 @@ In your Vercel project → Settings → Environment Variables, add:
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
 - `RESEND_API_KEY`
+- `BREVO_API_KEY`
 - `EMAIL_FROM`
+- `BREVO_FROM_EMAIL`
+- `BREVO_FROM_NAME`
+- `TRANSPORT_EMAIL_FROM`
+- `TRANSPORT_BREVO_FROM_EMAIL`
+- `TRANSPORT_FROM_NAME`
 - `WHATSAPP_PHONE_NUMBER_ID`
 - `WHATSAPP_ACCESS_TOKEN`
 - `NEXT_PUBLIC_APP_URL` (your Vercel URL)

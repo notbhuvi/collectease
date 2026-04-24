@@ -9,14 +9,16 @@ import { Trash2 } from 'lucide-react'
 interface Props {
   bidId: string
   transporterName: string
+  disabled?: boolean
 }
 
-export function DeleteBidButton({ bidId, transporterName }: Props) {
+export function DeleteBidButton({ bidId, transporterName, disabled = false }: Props) {
   const router = useRouter()
   const { toast } = useToast()
   const [loading, setLoading] = useState(false)
 
   async function handleDelete() {
+    if (disabled) return
     if (!confirm(`Delete bid from ${transporterName}? This cannot be undone.`)) return
     setLoading(true)
     try {
@@ -33,7 +35,7 @@ export function DeleteBidButton({ bidId, transporterName }: Props) {
   }
 
   return (
-    <Button size="sm" variant="ghost" onClick={handleDelete} loading={loading}
+    <Button size="sm" variant="ghost" onClick={handleDelete} loading={loading} disabled={disabled}
       className="text-red-500 hover:text-red-700 hover:bg-red-50 h-7 px-2">
       <Trash2 className="h-3 w-3" />
     </Button>

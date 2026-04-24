@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -6,24 +6,25 @@ import { Badge } from '@/components/ui/badge'
 import { formatCurrency, formatDate, getDaysOverdue } from '@/lib/utils'
 import { ReportExportButtons } from '@/components/reports/report-export-buttons'
 import { Clock } from 'lucide-react'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export default async function ReportsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id, name')
-    .eq('user_id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
-  if (!business) redirect('/auth/register')
+  if (!business) redirect('/dashboard/settings')
 
   const [{ data: invoices }, { data: clients }, { data: payments }] = await Promise.all([
-    supabase.from('invoices').select('*, client:clients(name)').eq('business_id', business.id),
-    supabase.from('clients').select('*').eq('business_id', business.id),
-    supabase.from('payments')
+    serviceClient.from('invoices').select('*, client:clients(name)').eq('business_id', business.id),
+    serviceClient.from('clients').select('*').eq('business_id', business.id),
+    serviceClient.from('payments')
       .select('*, invoice:invoices(invoice_number, client:clients(name))')
       .eq('business_id', business.id)
       .order('payment_date', { ascending: false }),

@@ -1,9 +1,10 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getOrCreateProfileForUser } from '@/lib/profile'
 import { calculateTransportTotalFare, getLoadQuantity, parseNumericQuantity } from '@/lib/transport'
 
-// DELETE — transport_team/admin can delete any bid
+// DELETE — admin can delete any bid; transport_team can delete only before bidding ends
 export async function DELETE(
   _request: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -19,8 +20,35 @@ export async function DELETE(
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
+  const { data: existingBid, error: bidError } = await serviceClient
+    .from('transport_bids')
+    .select('id, load_id, load:transport_loads(status, bidding_deadline)')
+    .eq('id', id)
+    .single()
+
+  if (bidError || !existingBid) {
+    return NextResponse.json({ error: 'Bid not found' }, { status: 404 })
+  }
+
+  const load = Array.isArray(existingBid.load) ? existingBid.load[0] : existingBid.load
+  if (!load) {
+    return NextResponse.json({ error: 'Related load not found' }, { status: 404 })
+  }
+
+  const deadlinePassed = new Date(load.bidding_deadline) < new Date()
+  const isAdmin = profile.role === 'admin'
+  if (!isAdmin && (load.status !== 'open' || deadlinePassed)) {
+    return NextResponse.json(
+      { error: 'Only admin can delete a bid after the bidding period has ended. It is otherwise kept as history.' },
+      { status: 400 }
+    )
+  }
+
   const { error } = await serviceClient.from('transport_bids').delete().eq('id', id)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidatePath('/transport')
+  revalidatePath('/transport/loads')
+  revalidatePath(`/transport/loads/${existingBid.load_id}`)
   return NextResponse.json({ success: true })
 }
 

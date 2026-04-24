@@ -1,19 +1,15 @@
 'use client'
 
-import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
-  ResponsiveContainer, Legend
-} from 'recharts'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { format, parseISO, subMonths, startOfMonth, endOfMonth } from 'date-fns'
+import { format, parseISO, subMonths, startOfMonth, endOfMonth, isValid } from 'date-fns'
 import { formatCurrency } from '@/lib/utils'
 import { TrendingUp } from 'lucide-react'
 
 interface Invoice {
-  total_amount: number
-  paid_amount: number | null
+  total_amount: number | string | null
+  paid_amount: number | string | null
   paid_at: string | null
-  issue_date: string
+  issue_date: string | null
   status: string
 }
 
@@ -21,8 +17,18 @@ interface DashboardChartsProps {
   invoices: Invoice[]
 }
 
+function toAmount(value: number | string | null | undefined) {
+  const num = Number(value || 0)
+  return Number.isFinite(num) ? num : 0
+}
+
+function safeParse(date: string | null | undefined) {
+  if (!date) return null
+  const parsed = parseISO(date)
+  return isValid(parsed) ? parsed : null
+}
+
 export function DashboardCharts({ invoices }: DashboardChartsProps) {
-  // Build last 6 months data
   const months = Array.from({ length: 6 }, (_, i) => {
     const date = subMonths(new Date(), 5 - i)
     const start = startOfMonth(date)
@@ -31,36 +37,26 @@ export function DashboardCharts({ invoices }: DashboardChartsProps) {
 
     const invoiced = invoices
       .filter(inv => {
-        const d = parseISO(inv.issue_date)
-        return d >= start && d <= end
+        const issueDate = safeParse(inv.issue_date)
+        return issueDate ? issueDate >= start && issueDate <= end : false
       })
-      .reduce((sum, inv) => sum + inv.total_amount, 0)
+      .reduce((sum, inv) => sum + toAmount(inv.total_amount), 0)
 
     const collected = invoices
       .filter(inv => {
-        if (!inv.paid_at) return false
-        const d = parseISO(inv.paid_at)
-        return d >= start && d <= end
+        const paidAt = safeParse(inv.paid_at)
+        return paidAt ? paidAt >= start && paidAt <= end : false
       })
-      .reduce((sum, inv) => sum + (inv.paid_amount || inv.total_amount), 0)
+      .reduce((sum, inv) => {
+        const paidAmount = toAmount(inv.paid_amount)
+        const totalAmount = toAmount(inv.total_amount)
+        return sum + (paidAmount > 0 ? paidAmount : totalAmount)
+      }, 0)
 
     return { month: label, invoiced, collected }
   })
 
-  const CustomTooltip = ({ active, payload, label }: any) => {
-    if (!active || !payload?.length) return null
-    return (
-      <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-lg text-xs">
-        <p className="font-semibold text-gray-900 mb-2">{label}</p>
-        {payload.map((p: any) => (
-          <p key={p.name} style={{ color: p.color }} className="flex justify-between gap-4">
-            <span>{p.name}</span>
-            <span className="font-medium">{formatCurrency(p.value)}</span>
-          </p>
-        ))}
-      </div>
-    )
-  }
+  const maxValue = Math.max(...months.flatMap(month => [month.invoiced, month.collected]), 1)
 
   return (
     <Card className="h-full">
@@ -70,24 +66,45 @@ export function DashboardCharts({ invoices }: DashboardChartsProps) {
           Collection Trend (6 months)
         </CardTitle>
       </CardHeader>
-      <CardContent>
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={months} barSize={20} barGap={4}>
-            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" vertical={false} />
-            <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#6b7280' }} axisLine={false} tickLine={false} />
-            <YAxis
-              tick={{ fontSize: 12, fill: '#6b7280' }}
-              axisLine={false}
-              tickLine={false}
-              tickFormatter={v => v >= 100000 ? `${(v / 100000).toFixed(1)}L` : v >= 1000 ? `${(v / 1000).toFixed(0)}K` : String(v)}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend wrapperStyle={{ fontSize: 12, paddingTop: 8 }} />
-            <Bar dataKey="invoiced" name="Invoiced" fill="#bfdbfe" radius={[4, 4, 0, 0]} />
-            <Bar dataKey="collected" name="Collected" fill="#2563eb" radius={[4, 4, 0, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+      <CardContent className="space-y-4">
+        {months.map(month => {
+          const invoicedPct = (month.invoiced / maxValue) * 100
+          const collectedPct = (month.collected / maxValue) * 100
+
+          return (
+            <div key={month.month} className="space-y-2">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium text-gray-700">{month.month}</p>
+                <div className="text-right">
+                  <p className="text-xs text-gray-500">Invoiced {formatCurrency(month.invoiced)}</p>
+                  <p className="text-xs text-blue-600">Collected {formatCurrency(month.collected)}</p>
+                </div>
+              </div>
+              <div className="space-y-1.5">
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
+                    <span>Invoiced</span>
+                    <span>{formatCurrency(month.invoiced)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-blue-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-300" style={{ width: `${invoicedPct}%` }} />
+                  </div>
+                </div>
+                <div>
+                  <div className="mb-1 flex items-center justify-between text-[11px] text-gray-500">
+                    <span>Collected</span>
+                    <span>{formatCurrency(month.collected)}</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-slate-100 overflow-hidden">
+                    <div className="h-full rounded-full bg-blue-600" style={{ width: `${collectedPct}%` }} />
+                  </div>
+                </div>
+              </div>
+            </div>
+          )
+        })}
       </CardContent>
     </Card>
   )
 }
+

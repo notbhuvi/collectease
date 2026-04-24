@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server'
+import { revalidatePath } from 'next/cache'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { getOrCreateProfileForUser } from '@/lib/profile'
 import { calculateTransportTotalFare, getLoadQuantity, parseNumericQuantity } from '@/lib/transport'
@@ -93,6 +94,8 @@ export async function POST(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidatePath('/portal')
+  revalidatePath('/portal/bids')
   return NextResponse.json({ bid: data }, { status: 201 })
 }
 
@@ -140,5 +143,7 @@ export async function PATCH(request: Request) {
     .single()
 
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  revalidatePath('/portal')
+  revalidatePath('/portal/bids')
   return NextResponse.json({ bid: data })
 }

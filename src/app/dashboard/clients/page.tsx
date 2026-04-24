@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent } from '@/components/ui/card'
@@ -7,28 +7,29 @@ import { formatCurrency } from '@/lib/utils'
 import { Users, Plus } from 'lucide-react'
 import { AddClientButton } from '@/components/clients/add-client-button'
 import { DeleteClientButton } from '@/components/clients/delete-client-button'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export default async function ClientsPage() {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
-  if (!business) redirect('/auth/register')
+  if (!business) redirect('/dashboard/settings')
 
-  const { data: clients } = await supabase
+  const { data: clients } = await serviceClient
     .from('clients')
     .select('*')
     .eq('business_id', business.id)
     .order('name')
 
   // Get outstanding per client
-  const { data: invoiceSums } = await supabase
+  const { data: invoiceSums } = await serviceClient
     .from('invoices')
     .select('client_id, total_amount, status')
     .eq('business_id', business.id)

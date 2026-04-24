@@ -1,5 +1,5 @@
 // ── Role system ───────────────────────────────────────────────────────────────
-export type UserRole = 'admin' | 'accounts' | 'transport_team' | 'transporter'
+export type UserRole = 'admin' | 'accounts' | 'transport_team' | 'transporter' | 'plant_ops'
 
 export interface Profile {
   id: string
@@ -168,4 +168,90 @@ export interface DashboardStats {
     bucket_90_plus: number
   }
   monthly_collection: Array<{ month: string; collected: number; invoiced: number }>
+}
+
+// ── Plant & Warehouse ────────────────────────────────────────────────────────
+export type ProductionShift = 'A' | 'B' | 'C' | 'General'
+export type RawMaterialTxnType = 'opening' | 'inward' | 'consumed' | 'adjustment'
+export type WarehouseMovementType = 'inward' | 'outward' | 'adjustment'
+export type DispatchStatus = 'pending' | 'completed' | 'cancelled'
+
+export interface PlantProductionLog {
+  id: string
+  date: string
+  shift: ProductionShift
+  product_name: string
+  sku: string | null
+  qty: number
+  unit: string
+  machine: string | null
+  operator: string | null
+  remarks: string | null
+  created_by: string | null
+  created_at: string
+}
+
+export interface RawMaterial {
+  id: string
+  material_name: string
+  unit: string
+  min_level: number
+  created_at: string
+}
+
+export interface RawMaterialTransaction {
+  id: string
+  material_id: string
+  date: string
+  type: RawMaterialTxnType
+  qty: number
+  rate: number | null
+  remarks: string | null
+  created_at: string
+}
+
+export interface FinishedGoodsStock {
+  id: string
+  product_name: string
+  sku: string | null
+  qty: number
+  updated_at: string
+}
+
+export interface FgDispatch {
+  id: string
+  date: string
+  customer_name: string
+  invoice_no: string | null
+  truck_no: string | null
+  destination: string | null
+  product_name: string
+  sku: string | null
+  qty: number
+  remarks: string | null
+  status: DispatchStatus
+}
+
+export interface WarehouseItem {
+  id: string
+  item_name: string
+  sku: string | null
+  category: string | null
+  unit: string
+  opening_stock: number
+  current_stock: number
+  reserved_stock: number
+  min_level: number
+  unit_rate: number
+  updated_at: string
+}
+
+export interface WarehouseMovement {
+  id: string
+  item_id: string
+  date: string
+  type: WarehouseMovementType
+  qty: number
+  reference_no: string | null
+  remarks: string | null
 }

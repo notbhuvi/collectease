@@ -1,4 +1,4 @@
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import Link from 'next/link'
 import { PageHeader } from '@/components/layout/page-header'
@@ -9,6 +9,9 @@ import { formatCurrency, formatDate, getDaysOverdue } from '@/lib/utils'
 import { Plus, FileText, Search, Filter } from 'lucide-react'
 import { InvoiceActions } from '@/components/invoices/invoice-actions'
 import { InvoiceFilters } from '@/components/invoices/invoice-filters'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export default async function InvoicesPage({
   searchParams,
@@ -19,19 +22,17 @@ export default async function InvoicesPage({
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) redirect('/auth/login')
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
-  if (!business) redirect('/auth/register')
+  if (!business) redirect('/dashboard/settings')
 
   const params = await searchParams
   const filter = params.filter || 'all'
   const search = params.search || ''
 
-  let query = supabase
+  let query = serviceClient
     .from('invoices')
     .select('*, client:clients(id, name, phone, email)')
     .eq('business_id', business.id)

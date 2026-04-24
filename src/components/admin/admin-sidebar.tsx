@@ -58,6 +58,7 @@ export function AdminSidebar({ userName }: { userName?: string }) {
           {[
             { href: '/dashboard', label: 'Invoice Dashboard' },
             { href: '/transport', label: 'Transport' },
+            { href: '/plant', label: 'Plant & Warehouse' },
           ].map(({ href, label }) => (
             <Link key={href} href={href} onClick={() => setMobileOpen(false)}
               className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-gray-500 hover:bg-gray-100 hover:text-gray-900 transition-colors">

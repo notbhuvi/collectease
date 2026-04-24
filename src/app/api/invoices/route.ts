@@ -1,23 +1,24 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export async function GET(request: Request) {
   const supabase = await createClient()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
   const { searchParams } = new URL(request.url)
   const status = searchParams.get('status')
 
-  let query = supabase
+  let query = serviceClient
     .from('invoices')
     .select('*, client:clients(id, name, email, phone)')
     .eq('business_id', business.id)
@@ -36,22 +37,21 @@ export async function POST(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const body = await request.json()
-
-  // Verify the business belongs to the user
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('id')
-    .eq('user_id', user.id)
-    .eq('id', body.business_id)
-    .single()
-
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
-  const { data, error } = await supabase
+  const body = await request.json()
+
+  if (body.business_id && body.business_id !== business.id) {
+    return NextResponse.json({ error: 'Invalid business' }, { status: 403 })
+  }
+
+  const { data, error } = await serviceClient
     .from('invoices')
     .insert({
-      business_id: body.business_id,
+      business_id: business.id,
       client_id: body.client_id,
       invoice_number: body.invoice_number,
       amount: body.amount,
@@ -78,21 +78,25 @@ export async function PATCH(request: Request) {
   const { data: { user } } = await supabase.auth.getUser()
   if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
+  if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
+
   const body = await request.json()
   const { id, ...updates } = body
 
-  // Ensure the invoice belongs to user's business
-  const { data: inv } = await supabase
+  const { data: inv } = await serviceClient
     .from('invoices')
-    .select('business_id, businesses!inner(user_id)')
+    .select('business_id')
     .eq('id', id)
     .single()
 
-  if (!inv || (inv.businesses as any).user_id !== user.id) {
+  if (!inv || inv.business_id !== business.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
-  const { data, error } = await supabase
+  const { data, error } = await serviceClient
     .from('invoices')
     .update(updates)
     .eq('id', id)

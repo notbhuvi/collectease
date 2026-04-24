@@ -40,7 +40,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: 'Transport team can only create transporter accounts' }, { status: 403 })
   }
 
-  const allowedRoles = ['admin', 'accounts', 'transport_team', 'transporter']
+  const allowedRoles = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops']
   if (!email || !password || !role || !allowedRoles.includes(role)) {
     return NextResponse.json({ error: 'Missing or invalid fields' }, { status: 400 })
   }
@@ -66,7 +66,7 @@ export async function POST(request: Request) {
   try {
     const roleLabel: Record<string, string> = {
       admin: 'Admin', accounts: 'Accounts',
-      transport_team: 'Transport Team', transporter: 'Transporter',
+      transport_team: 'Transport Team', transporter: 'Transporter', plant_ops: 'Plant Ops',
     }
     const emailBody = `Dear ${full_name || email},
 

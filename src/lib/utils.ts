@@ -1,6 +1,6 @@
 import { type ClassValue, clsx } from 'clsx'
 import { twMerge } from 'tailwind-merge'
-import { format, differenceInDays, parseISO } from 'date-fns'
+import { format, differenceInDays, parseISO, isValid } from 'date-fns'
 import { RiskLabel, InvoiceStatus } from '@/types'
 
 export function cn(...inputs: ClassValue[]) {
@@ -8,26 +8,33 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
+  const safeAmount = Number.isFinite(Number(amount)) ? Number(amount) : 0
   return new Intl.NumberFormat('en-IN', {
     style: 'currency',
     currency: 'INR',
     maximumFractionDigits: 0,
-  }).format(amount)
+  }).format(safeAmount)
 }
 
-export function formatDate(date: string | Date): string {
+export function formatDate(date: string | Date | null | undefined): string {
+  if (!date) return '—'
   const d = typeof date === 'string' ? parseISO(date) : date
+  if (!isValid(d)) return '—'
   return format(d, 'dd MMM yyyy')
 }
 
-export function formatDateShort(date: string | Date): string {
+export function formatDateShort(date: string | Date | null | undefined): string {
+  if (!date) return '—'
   const d = typeof date === 'string' ? parseISO(date) : date
+  if (!isValid(d)) return '—'
   return format(d, 'dd/MM/yyyy')
 }
 
-export function getDaysOverdue(dueDate: string): number {
+export function getDaysOverdue(dueDate: string | null | undefined): number {
+  if (!dueDate) return 0
   const today = new Date()
   const due = parseISO(dueDate)
+  if (!isValid(due)) return 0
   const days = differenceInDays(today, due)
   return days > 0 ? days : 0
 }

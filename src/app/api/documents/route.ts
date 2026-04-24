@@ -1,11 +1,14 @@
 import { NextResponse } from 'next/server'
-import { createClient } from '@/lib/supabase/server'
+import { createClient, createServiceClient } from '@/lib/supabase/server'
 import {
   generateInvoicePDF,
   generateLegalNoticePDF,
   generateMSMEComplaintPDF,
   generateReportCSV,
 } from '@/lib/pdf'
+import { getProfileForUser } from '@/lib/profile'
+import { getAccessibleBusinessForUser } from '@/lib/business'
+import type { UserRole } from '@/types'
 
 export async function GET(request: Request) {
   const supabase = await createClient()
@@ -15,19 +18,15 @@ export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
   const type = searchParams.get('type')
   const invoiceId = searchParams.get('invoiceId')
-  const businessId = searchParams.get('businessId')
-
-  const { data: business } = await supabase
-    .from('businesses')
-    .select('*')
-    .eq('user_id', user.id)
-    .single()
+  const serviceClient = await createServiceClient()
+  const profile = await getProfileForUser(serviceClient, user, 'role')
+  const business = await getAccessibleBusinessForUser(serviceClient, user, profile?.role as UserRole)
 
   if (!business) return NextResponse.json({ error: 'Business not found' }, { status: 404 })
 
   // CSV Report export
   if (type === 'report_csv') {
-    const { data: invoices } = await supabase
+    const { data: invoices } = await serviceClient
       .from('invoices')
       .select('*, client:clients(name)')
       .eq('business_id', business.id)
@@ -44,7 +43,7 @@ export async function GET(request: Request) {
 
   // PDF Report
   if (type === 'report_pdf') {
-    const { data: invoices } = await supabase
+    const { data: invoices } = await serviceClient
       .from('invoices')
       .select('*, client:clients(name)')
       .eq('business_id', business.id)
@@ -96,13 +95,13 @@ export async function GET(request: Request) {
   // Invoice / Legal / MSME PDFs
   if (!invoiceId) return NextResponse.json({ error: 'Missing invoiceId' }, { status: 400 })
 
-  const { data: invoice } = await supabase
+  const { data: invoice } = await serviceClient
     .from('invoices')
     .select('*, client:clients(*), business:businesses(*)')
     .eq('id', invoiceId)
     .single()
 
-  if (!invoice || invoice.business.user_id !== user.id) {
+  if (!invoice || invoice.business.id !== business.id) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 })
   }
 
@@ -116,7 +115,7 @@ export async function GET(request: Request) {
     pdfBuf = await generateLegalNoticePDF(invoice.business, invoice.client, invoice)
     filename = `legal-notice-${invoice.invoice_number}.pdf`
 
-    await supabase.from('escalation_logs').insert({
+    await serviceClient.from('escalation_logs').insert({
       invoice_id: invoiceId,
       business_id: business.id,
       type: 'legal_notice',
@@ -125,7 +124,7 @@ export async function GET(request: Request) {
     pdfBuf = await generateMSMEComplaintPDF(invoice.business, invoice.client, invoice)
     filename = `msme-complaint-${invoice.invoice_number}.pdf`
 
-    await supabase.from('escalation_logs').insert({
+    await serviceClient.from('escalation_logs').insert({
       invoice_id: invoiceId,
       business_id: business.id,
       type: 'msme_complaint',
