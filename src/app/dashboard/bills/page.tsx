@@ -1,6 +1,5 @@
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
-import { UploadBill } from '@/components/bills/upload-bill'
 import { BillTable } from '@/components/bills/bill-table'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
@@ -20,13 +19,13 @@ export default async function DashboardBillsPage() {
     redirect(getRoleHome(profile?.role, '/auth/login'))
   }
 
-  const billState = await getBillsForViewerSafe(serviceClient, user, profile)
+  const billState = await getBillsForViewerSafe(serviceClient, user, profile, { status: 'approved' })
 
   return (
     <div className="space-y-6">
       <PageHeader
-        title="Bill Approvals"
-        description="Upload bills for admin approval, track status, and download the stamped copy."
+        title="Approved Bills"
+        description="Only bills approved by admin appear here for finance processing."
       />
       {billState.unavailable ? (
         <Card>
@@ -39,10 +38,7 @@ export default async function DashboardBillsPage() {
           </CardContent>
         </Card>
       ) : (
-        <>
-          <UploadBill />
-          <BillTable initialBills={billState.data} />
-        </>
+        <BillTable initialBills={billState.data} mode="finance" />
       )}
     </div>
   )

@@ -14,7 +14,7 @@ import { useState } from 'react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { href: '/dashboard/bills', label: 'Bills', icon: FileCheck2 },
+  { href: '/dashboard/bills', label: 'Approved Bills', icon: FileCheck2 },
   { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
   { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },
@@ -36,7 +36,7 @@ export function Sidebar({ businessName }: SidebarProps) {
     router.push('/auth/login')
   }
 
-  const SidebarContent = () => (
+  const sidebarContent = (
     <div className="flex h-full flex-col">
       {/* Logo */}
       <div className="flex items-center gap-2 px-6 py-5 border-b border-gray-100">
@@ -87,7 +87,7 @@ export function Sidebar({ businessName }: SidebarProps) {
     <>
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex lg:flex-col w-56 shrink-0 bg-white border-r border-gray-200 h-screen sticky top-0">
-        <SidebarContent />
+        {sidebarContent}
       </aside>
 
       {/* Mobile header bar */}
@@ -112,7 +112,7 @@ export function Sidebar({ businessName }: SidebarProps) {
             >
               <X className="h-5 w-5" />
             </button>
-            <SidebarContent />
+            {sidebarContent}
           </aside>
         </div>
       )}

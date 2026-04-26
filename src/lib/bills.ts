@@ -25,6 +25,10 @@ export interface BillModuleResult<T> {
   reason?: string
 }
 
+interface BillViewerOptions {
+  status?: BillApprovalStatus
+}
+
 export function isAllowedBillMimeType(fileType: string): fileType is AllowedBillMimeType {
   return (ALLOWED_BILL_MIME_TYPES as readonly string[]).includes(fileType)
 }
@@ -79,15 +83,20 @@ type BasicProfileRow = {
   email: string | null
 }
 
-export async function listBillsForViewer(serviceClient: SupabaseClient, viewer: Pick<User, 'id'>, profile: ProfileRecord, options?: {
-  status?: BillApprovalStatus
-}) {
+export async function listBillsForViewer(
+  serviceClient: SupabaseClient,
+  viewer: Pick<User, 'id'>,
+  profile: ProfileRecord,
+  options?: BillViewerOptions
+) {
   let query = serviceClient
     .from('bill_approvals')
     .select('*')
     .order('created_at', { ascending: false })
 
-  if (profile.role !== 'admin') {
+  if (profile.role === 'accounts') {
+    query = query.eq('status', 'approved')
+  } else if (profile.role !== 'admin') {
     query = query.eq('uploaded_by', viewer.id)
   }
 
@@ -162,7 +171,7 @@ export async function getBillsForViewerSafe(
   serviceClient: SupabaseClient,
   viewer: Pick<User, 'id'>,
   profile: ProfileRecord,
-  options?: { status?: BillApprovalStatus }
+  options?: BillViewerOptions
 ): Promise<BillModuleResult<BillListItem[]>> {
   try {
     const bills = await listBillsForViewer(serviceClient, viewer, profile, options)
@@ -318,7 +327,7 @@ Bill: ${bill.original_name || bill.id}
 Uploaded by: ${uploadedBy.full_name || uploaderEmail || uploadedBy.email || 'Unknown user'}
 Uploaded at: ${new Date(bill.created_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' })}
 
-Please review it in the admin portal.
+Please review it in the admin portal so finance only receives approved bills.
 
 Regards,
 CollectEase`
@@ -356,12 +365,14 @@ export async function notifyUploaderOfDecision(serviceClient: SupabaseClient, bi
       `Bill ${bill.status} in CollectEase`,
       `Dear ${recipient.full_name || recipient.email},
 
-Your uploaded bill "${bill.original_name || bill.id}" has been ${bill.status} by ${adminName}.
+The bill "${bill.original_name || bill.id}" uploaded by HR has been ${bill.status} by ${adminName}.
 
 Remark: ${bill.admin_remark || 'No remark provided'}
 Decision time: ${bill.decided_at ? new Date(bill.decided_at).toLocaleString('en-IN', { timeZone: 'Asia/Kolkata' }) : 'Just now'}
 
-You can now sign in to CollectEase and download the stamped bill.
+${bill.status === 'approved'
+  ? 'The approved stamped bill is now available to the finance team in CollectEase.'
+  : 'Because it was declined, finance will not see this bill in their queue.'}
 
 Regards,
 CollectEase`

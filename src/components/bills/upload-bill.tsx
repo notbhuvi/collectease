@@ -9,7 +9,15 @@ import { useToast } from '@/components/ui/toast'
 const ACCEPTED_TYPES = ['application/pdf', 'image/jpeg', 'image/png']
 const MAX_SIZE_BYTES = 10 * 1024 * 1024
 
-export function UploadBill() {
+interface UploadBillProps {
+  title?: string
+  description?: string
+}
+
+export function UploadBill({
+  title = 'Upload Bill',
+  description = 'Accepted formats: PDF, JPG, JPEG, PNG. Max size: 10MB.',
+}: UploadBillProps) {
   const router = useRouter()
   const { toast } = useToast()
   const inputRef = useRef<HTMLInputElement | null>(null)
@@ -66,8 +74,8 @@ export function UploadBill() {
     <form onSubmit={handleSubmit} className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
-          <h2 className="text-sm font-semibold text-gray-900">Upload Bill</h2>
-          <p className="mt-1 text-sm text-gray-500">Accepted formats: PDF, JPG, JPEG, PNG. Max size: 10MB.</p>
+          <h2 className="text-sm font-semibold text-gray-900">{title}</h2>
+          <p className="mt-1 text-sm text-gray-500">{description}</p>
         </div>
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-gray-200 px-3 py-2 text-sm font-medium text-gray-700 hover:border-gray-300 hover:bg-gray-50">

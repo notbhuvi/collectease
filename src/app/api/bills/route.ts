@@ -12,7 +12,7 @@ export async function GET(request: Request) {
   const serviceClient = await createServiceClient()
   const profile = await requireBillAccessContext(serviceClient, user)
 
-  if (profile.role !== 'admin' && profile.role !== 'accounts') {
+  if (profile.role !== 'admin' && profile.role !== 'accounts' && profile.role !== 'hr') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 

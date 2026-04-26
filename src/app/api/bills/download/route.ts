@@ -35,11 +35,11 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: billError?.message || 'Bill not found' }, { status: 404 })
   }
 
-  if (profile.role !== 'admin' && bill.uploaded_by !== user.id) {
+  if (profile.role !== 'admin' && profile.role !== 'accounts' && bill.uploaded_by !== user.id) {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
-  if (bill.status === 'pending' || !bill.stamped_file_url) {
+  if (bill.status !== 'approved' || !bill.stamped_file_url) {
     return NextResponse.json({ error: 'Stamped bill is not available yet' }, { status: 409 })
   }
 

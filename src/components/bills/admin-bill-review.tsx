@@ -64,7 +64,9 @@ export function AdminBillReview({ initialBills }: { initialBills: BillListItem[]
         setRemark('')
         toast({
           title: decision === 'approved' ? 'Bill approved' : 'Bill declined',
-          description: 'The stamped PDF is now available to the finance team.',
+          description: decision === 'approved'
+            ? 'The stamped PDF is now available to the finance team.'
+            : 'The bill has been stopped before reaching finance.',
           variant: 'success',
         })
         router.refresh()
@@ -79,7 +81,7 @@ export function AdminBillReview({ initialBills }: { initialBills: BillListItem[]
     return (
       <div className="rounded-xl border border-dashed border-gray-200 bg-white px-6 py-12 text-center">
         <p className="text-sm font-medium text-gray-900">No pending bill approvals.</p>
-        <p className="mt-1 text-sm text-gray-500">New finance uploads will appear here for review.</p>
+        <p className="mt-1 text-sm text-gray-500">New HR uploads will appear here for review.</p>
       </div>
     )
   }

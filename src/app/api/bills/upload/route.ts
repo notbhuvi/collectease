@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   const serviceClient = await createServiceClient()
   const profile = await requireBillAccessContext(serviceClient, user)
-  if (profile.role !== 'accounts' && profile.role !== 'admin') {
+  if (profile.role !== 'hr' && profile.role !== 'admin') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 })
   }
 
