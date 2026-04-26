@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
-import { Download, Loader2 } from 'lucide-react'
+import { Download, Loader2, Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { useToast } from '@/components/ui/toast'
@@ -26,6 +26,7 @@ export function BillTable({ initialBills, mode = 'finance' }: BillTableProps) {
   const { toast } = useToast()
   const [bills, setBills] = useState(initialBills)
   const [activeBillId, setActiveBillId] = useState<string | null>(null)
+  const [deleteBillId, setDeleteBillId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
 
   async function downloadBill(billId: string) {
@@ -55,10 +56,9 @@ export function BillTable({ initialBills, mode = 'finance' }: BillTableProps) {
         link.click()
         URL.revokeObjectURL(url)
 
-        setBills(current => current.filter(bill => bill.id !== billId))
         toast({
           title: 'Stamped bill downloaded',
-          description: 'The source files were cleaned up and only the text log remains.',
+          description: 'The approved bill is retained for 3 days unless finance deletes it earlier.',
           variant: 'success',
         })
         router.refresh()
@@ -72,6 +72,39 @@ export function BillTable({ initialBills, mode = 'finance' }: BillTableProps) {
   }
 
   const isFinance = mode === 'finance'
+
+  async function deleteBill(billId: string) {
+    if (!confirm('Delete this approved bill from the finance queue?')) return
+    setDeleteBillId(billId)
+
+    startTransition(async () => {
+      try {
+        const res = await fetch('/api/bills/cleanup', {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ billId }),
+        })
+
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          throw new Error(data.error || 'Delete failed')
+        }
+
+        setBills(current => current.filter(bill => bill.id !== billId))
+        toast({
+          title: 'Approved bill deleted',
+          description: 'The bill files were removed before the automatic cleanup window.',
+          variant: 'success',
+        })
+        router.refresh()
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Delete failed'
+        toast({ title: 'Could not delete bill', description: message, variant: 'error' })
+      } finally {
+        setDeleteBillId(null)
+      }
+    })
+  }
 
   if (bills.length === 0) {
     return (
@@ -96,12 +129,14 @@ export function BillTable({ initialBills, mode = 'finance' }: BillTableProps) {
               {!isFinance ? <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Uploaded By</th> : null}
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Upload Date</th>
               <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Status</th>
-              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{isFinance ? 'Action' : 'Finance Visibility'}</th>
+              {isFinance ? <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">Retention</th> : null}
+              <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">{isFinance ? 'Actions' : 'Finance Visibility'}</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
             {bills.map(bill => {
               const isLoading = isPending && activeBillId === bill.id
+              const isDeleting = isPending && deleteBillId === bill.id
               return (
                 <tr key={bill.id}>
                   <td className="px-4 py-4">
@@ -115,12 +150,25 @@ export function BillTable({ initialBills, mode = 'finance' }: BillTableProps) {
                   <td className="px-4 py-4">
                     <Badge variant={getStatusVariant(bill.status)}>{bill.status}</Badge>
                   </td>
+                  {isFinance ? (
+                    <td className="px-4 py-4 text-sm text-gray-600">
+                      {bill.delete_after_at
+                        ? `Auto-delete ${formatDate(bill.delete_after_at)}`
+                        : '3 days after first download'}
+                    </td>
+                  ) : null}
                   <td className="px-4 py-4">
                     {isFinance ? (
-                      <Button size="sm" onClick={() => downloadBill(bill.id)} disabled={isLoading}>
-                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
-                        Download Stamped File
-                      </Button>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" onClick={() => downloadBill(bill.id)} disabled={isLoading || isDeleting}>
+                          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Download className="mr-2 h-4 w-4" />}
+                          Download Stamped File
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => deleteBill(bill.id)} disabled={isLoading || isDeleting}>
+                          {isDeleting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Trash2 className="mr-2 h-4 w-4" />}
+                          Delete
+                        </Button>
+                      </div>
                     ) : bill.status === 'pending' ? (
                       <span className="text-sm text-gray-500">Awaiting admin review</span>
                     ) : bill.status === 'approved' ? (

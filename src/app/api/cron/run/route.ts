@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { createServiceClient } from '@/lib/supabase/server'
+import { cleanupExpiredApprovedBills } from '@/lib/bills'
 import { buildReminderMessage, sendEmail, getReminderType } from '@/lib/messaging'
 import { generateReminderPDF } from '@/lib/pdf'
 import { getDaysOverdue } from '@/lib/utils'
@@ -13,7 +14,7 @@ export async function GET(request: Request) {
   }
 
   const supabase = await createServiceClient()
-  const results = { updated: 0, reminders_sent: 0, skipped: 0, errors: 0 }
+  const results = { updated: 0, reminders_sent: 0, skipped: 0, errors: 0, bills_deleted: 0 }
 
   // Step 1: Mark overdue invoices
   const { data: updatedInvoices, error: overdueError } = await supabase
@@ -25,6 +26,13 @@ export async function GET(request: Request) {
 
   if (overdueError) console.error('Overdue update error:', overdueError)
   results.updated = updatedInvoices?.length || 0
+
+  try {
+    results.bills_deleted = await cleanupExpiredApprovedBills(supabase)
+  } catch (billCleanupError) {
+    console.error('Approved bill cleanup error:', billCleanupError)
+    results.errors++
+  }
 
   // Step 2: Fetch active unpaid invoices (1-day guard to avoid double-sends)
   const oneDayAgo = new Date(Date.now() - 86400000).toISOString()
@@ -152,7 +160,12 @@ export async function GET(request: Request) {
   return NextResponse.json({ success: true, ...results, timestamp: new Date().toISOString() })
 }
 
-function shouldSendReminder(invoice: any, daysOverdue: number): boolean {
+function shouldSendReminder(invoice: {
+  reminder_initial_delay?: number | null
+  reminder_interval_days?: number | null
+  reminder_count?: number | null
+  last_reminder_at?: string | null
+}, daysOverdue: number): boolean {
   const initialDelay = invoice.reminder_initial_delay ?? 0
   const interval = invoice.reminder_interval_days ?? 7
   const reminderCount = invoice.reminder_count || 0

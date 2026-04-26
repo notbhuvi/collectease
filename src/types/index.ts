@@ -184,6 +184,8 @@ export interface BillApproval {
   stamped_file_url: string | null
   created_at: string
   decided_at: string | null
+  downloaded_at: string | null
+  delete_after_at: string | null
 }
 
 export interface BillLog {

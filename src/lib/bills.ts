@@ -8,6 +8,7 @@ import type { BillApproval, BillApprovalStatus } from '@/types'
 export const BILL_UPLOAD_BUCKET = 'bill-uploads'
 export const MAX_BILL_SIZE_BYTES = 10 * 1024 * 1024
 export const ALLOWED_BILL_MIME_TYPES = ['application/pdf', 'image/jpeg', 'image/png'] as const
+export const BILL_RETENTION_DAYS = 3
 
 type AllowedBillMimeType = (typeof ALLOWED_BILL_MIME_TYPES)[number]
 
@@ -224,6 +225,72 @@ export async function createSignedPreviewUrl(serviceClient: SupabaseClient, path
   }
 
   return data?.signedUrl || null
+}
+
+export function getBillDeleteAfterDate(baseDate = new Date()) {
+  return new Date(baseDate.getTime() + BILL_RETENTION_DAYS * 24 * 60 * 60 * 1000)
+}
+
+export async function logBillRemoval(serviceClient: SupabaseClient, bill: BillApproval, actionBy: string | null) {
+  const { error } = await serviceClient
+    .from('bill_logs')
+    .insert({
+      bill_id: bill.id,
+      uploaded_by: bill.uploaded_by,
+      status: bill.status,
+      remark: bill.admin_remark,
+      action_by: actionBy,
+    })
+
+  if (error) {
+    throw new Error(error.message)
+  }
+}
+
+export async function purgeBillApproval(serviceClient: SupabaseClient, bill: BillApproval, actionBy: string | null) {
+  const pathsToDelete = [bill.file_url, bill.stamped_file_url].filter((path): path is string => Boolean(path))
+  if (pathsToDelete.length > 0) {
+    const { error: removeError } = await serviceClient.storage
+      .from(BILL_UPLOAD_BUCKET)
+      .remove(pathsToDelete)
+
+    if (removeError) {
+      throw new Error(removeError.message)
+    }
+  }
+
+  await logBillRemoval(serviceClient, bill, actionBy)
+
+  const { error: deleteError } = await serviceClient
+    .from('bill_approvals')
+    .delete()
+    .eq('id', bill.id)
+
+  if (deleteError) {
+    throw new Error(deleteError.message)
+  }
+}
+
+export async function cleanupExpiredApprovedBills(serviceClient: SupabaseClient) {
+  const nowIso = new Date().toISOString()
+  const { data: expiredBills, error } = await serviceClient
+    .from('bill_approvals')
+    .select('*')
+    .eq('status', 'approved')
+    .not('delete_after_at', 'is', null)
+    .lte('delete_after_at', nowIso)
+
+  if (error) {
+    throw new Error(error.message)
+  }
+
+  let deleted = 0
+  for (const bill of (expiredBills || []) as BillApproval[]) {
+    await purgeBillApproval(serviceClient, bill, bill.admin_id)
+    deleted++
+  }
+
+  return deleted
 }
 
 export async function stampBillDocument(args: {
