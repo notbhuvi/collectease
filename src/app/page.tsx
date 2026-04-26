@@ -1,5 +1,6 @@
 import { redirect } from 'next/navigation'
 import { createClient, createServiceClient } from '@/lib/supabase/server'
+import { getRoleHome } from '@/lib/roles'
 
 export default async function Home() {
   const supabase = await createClient()
@@ -35,11 +36,9 @@ export default async function Home() {
   }
 
   // Explicit role → correct home
-  if (role === 'admin')          redirect('/admin')
-  if (role === 'transport_team') redirect('/transport')
-  if (role === 'transporter')    redirect('/portal')
-  if (role === 'accounts')       redirect('/dashboard')
-  if (role === 'plant_ops')      redirect('/plant')
+  if (role) {
+    redirect(getRoleHome(role, '/auth/login'))
+  }
 
   // Unknown/missing role — send to login to re-authenticate
   redirect('/auth/login')

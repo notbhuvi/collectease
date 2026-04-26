@@ -6,6 +6,7 @@ export const ROLE_REDIRECTS: Record<string, string> = {
   transport_team: '/transport',
   transporter: '/portal',
   plant_ops: '/plant',
+  hr: '/hr',
 }
 
 export const ROLE_LABELS: Record<string, string> = {
@@ -14,6 +15,7 @@ export const ROLE_LABELS: Record<string, string> = {
   transport_team: 'Transport Team',
   transporter: 'Transporter',
   plant_ops: 'Plant Ops',
+  hr: 'HR',
 }
 
 export const DASHBOARD_ROLES: UserRole[] = ['admin', 'accounts']
@@ -21,6 +23,7 @@ export const TRANSPORT_ROLES: UserRole[] = ['admin', 'transport_team']
 export const PORTAL_ROLES: UserRole[] = ['admin', 'transporter']
 export const ADMIN_ROLES: UserRole[] = ['admin']
 export const PLANT_PORTAL_ROLES: UserRole[] = ['admin', 'plant_ops']
+export const HR_PORTAL_ROLES: UserRole[] = ['admin', 'hr']
 
 export function isUserRole(role: string | null | undefined): role is UserRole {
   return role !== null && role !== undefined && role in ROLE_REDIRECTS
@@ -53,6 +56,10 @@ export function canAccessPath(role: string | null | undefined, pathname: string)
 
   if (pathname.startsWith('/plant')) {
     return PLANT_PORTAL_ROLES.includes(role)
+  }
+
+  if (pathname.startsWith('/hr')) {
+    return HR_PORTAL_ROLES.includes(role)
   }
 
   return true

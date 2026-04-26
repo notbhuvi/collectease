@@ -23,7 +23,7 @@ type ProfileQueryBuilder = {
   ) => PromiseLike<unknown>
 }
 
-const VALID_ROLES: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops']
+const VALID_ROLES: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops', 'hr']
 
 function normalizeRole(role: unknown): UserRole | null {
   return typeof role === 'string' && VALID_ROLES.includes(role as UserRole)

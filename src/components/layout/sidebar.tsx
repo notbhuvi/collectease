@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import {
   LayoutDashboard, FileText, Users, BarChart3,
-  Settings, LogOut, Menu, X
+  Settings, LogOut, Menu, X, FileCheck2
 } from 'lucide-react'
 import Image from 'next/image'
 import { cn } from '@/lib/utils'
@@ -14,6 +14,7 @@ import { useState } from 'react'
 
 const navItems = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { href: '/dashboard/bills', label: 'Bills', icon: FileCheck2 },
   { href: '/dashboard/invoices', label: 'Invoices', icon: FileText },
   { href: '/dashboard/clients', label: 'Clients', icon: Users },
   { href: '/dashboard/reports', label: 'Reports', icon: BarChart3 },

@@ -30,7 +30,7 @@ export async function proxy(request: NextRequest) {
 
   const { data: { user } } = await supabase.auth.getUser()
 
-  const protectedPrefixes = ['/dashboard', '/transport', '/portal', '/admin', '/plant']
+  const protectedPrefixes = ['/dashboard', '/transport', '/portal', '/admin', '/plant', '/hr']
   const isProtected = protectedPrefixes.some(p => pathname.startsWith(p))
   const isAuth = pathname.startsWith('/auth/')
 
@@ -60,6 +60,7 @@ export async function proxy(request: NextRequest) {
       transport_team: '/transport',
       transporter: '/portal',
       plant_ops: '/plant',
+      hr: '/hr',
     }
 
     const guards: { prefix: string; allowed: string[] }[] = [
@@ -68,6 +69,7 @@ export async function proxy(request: NextRequest) {
       { prefix: '/portal',    allowed: ['admin', 'transporter'] },
       { prefix: '/dashboard', allowed: ['admin', 'accounts'] },
       { prefix: '/plant',     allowed: ['admin', 'plant_ops'] },
+      { prefix: '/hr',        allowed: ['admin', 'hr'] },
     ]
 
     for (const guard of guards) {
@@ -88,6 +90,7 @@ export const config = {
     '/portal/:path*',
     '/admin/:path*',
     '/plant/:path*',
+    '/hr/:path*',
     '/auth/:path*',
   ],
 }

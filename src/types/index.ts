@@ -1,5 +1,5 @@
 // ── Role system ───────────────────────────────────────────────────────────────
-export type UserRole = 'admin' | 'accounts' | 'transport_team' | 'transporter' | 'plant_ops'
+export type UserRole = 'admin' | 'accounts' | 'transport_team' | 'transporter' | 'plant_ops' | 'hr'
 
 export interface Profile {
   id: string
@@ -168,6 +168,96 @@ export interface DashboardStats {
     bucket_90_plus: number
   }
   monthly_collection: Array<{ month: string; collected: number; invoiced: number }>
+}
+
+export type BillApprovalStatus = 'pending' | 'approved' | 'declined'
+
+export interface BillApproval {
+  id: string
+  uploaded_by: string | null
+  file_url: string | null
+  file_type: string | null
+  original_name: string | null
+  status: BillApprovalStatus
+  admin_id: string | null
+  admin_remark: string | null
+  stamped_file_url: string | null
+  created_at: string
+  decided_at: string | null
+}
+
+export interface BillLog {
+  id: string
+  bill_id: string | null
+  uploaded_by: string | null
+  status: BillApprovalStatus | null
+  remark: string | null
+  action_by: string | null
+  created_at: string
+}
+
+// ── HR Portal ────────────────────────────────────────────────────────────────
+export type EmployeeStatus = 'active' | 'inactive' | 'on_leave'
+export type AttendanceStatus = 'present' | 'absent' | 'half_day' | 'leave' | 'remote'
+export type LeaveStatus = 'pending' | 'approved' | 'rejected'
+
+export interface Employee {
+  id: string
+  user_id: string | null
+  name: string
+  email: string | null
+  phone: string | null
+  department: string | null
+  designation: string | null
+  joining_date: string | null
+  salary: number | null
+  status: EmployeeStatus
+  created_at: string
+}
+
+export interface AttendanceRecord {
+  id: string
+  employee_id: string
+  date: string
+  check_in: string | null
+  check_out: string | null
+  status: AttendanceStatus
+  biometric_ref: string | null
+  created_at: string
+  employee?: Pick<Employee, 'id' | 'name' | 'department' | 'designation'>
+}
+
+export interface LeaveRecord {
+  id: string
+  employee_id: string
+  type: string
+  from_date: string
+  to_date: string
+  status: LeaveStatus
+  approved_by: string | null
+  reason: string | null
+  created_at: string
+  employee?: Pick<Employee, 'id' | 'name' | 'department' | 'designation'>
+}
+
+export interface EmployeeDocument {
+  id: string
+  employee_id: string | null
+  doc_type: string
+  file_url: string
+  expires_on: string | null
+  created_at: string
+  employee?: Pick<Employee, 'id' | 'name' | 'department'>
+  signed_url?: string | null
+}
+
+export interface HrPolicyDocument {
+  id: string
+  title: string
+  file_url: string
+  created_by: string | null
+  created_at: string
+  signed_url?: string | null
 }
 
 // ── Plant & Warehouse ────────────────────────────────────────────────────────

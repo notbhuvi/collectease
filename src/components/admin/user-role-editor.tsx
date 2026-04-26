@@ -7,7 +7,7 @@ import { useToast } from '@/components/ui/toast'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { UserRole } from '@/types'
 
-const roles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops']
+const roles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops', 'hr']
 
 const roleColors: Record<string, string> = {
   admin: 'bg-violet-100 text-violet-700',
@@ -15,6 +15,7 @@ const roleColors: Record<string, string> = {
   transport_team: 'bg-orange-100 text-orange-700',
   transporter: 'bg-emerald-100 text-emerald-700',
   plant_ops: 'bg-cyan-100 text-cyan-700',
+  hr: 'bg-rose-100 text-rose-700',
 }
 
 interface Props {
@@ -46,8 +47,12 @@ export function UserRoleEditor({ userId, currentRole, currentName, currentCompan
       toast({ title: 'User updated', variant: 'success' })
       setEditing(false)
       router.refresh()
-    } catch (err: any) {
-      toast({ title: 'Error', description: err.message, variant: 'error' })
+    } catch (err: unknown) {
+      toast({
+        title: 'Error',
+        description: err instanceof Error ? err.message : 'Unable to update user',
+        variant: 'error',
+      })
     } finally {
       setLoading(false)
     }

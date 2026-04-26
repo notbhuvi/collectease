@@ -7,6 +7,7 @@ import Image from 'next/image'
 import { createClient } from '@/lib/supabase/client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { getRoleHome, isUserRole } from '@/lib/roles'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -21,7 +22,7 @@ export default function LoginPage() {
     setLoading(true)
 
     const supabase = createClient()
-    const { error: authError } = await supabase.auth.signInWithPassword({ email, password })
+    const { data: authData, error: authError } = await supabase.auth.signInWithPassword({ email, password })
 
     if (authError) {
       setError('Invalid email or password')
@@ -29,7 +30,22 @@ export default function LoginPage() {
       return
     }
 
-    // Let the server-side page.tsx handle role-based redirect via service client
+    const userId = authData.user?.id
+
+    if (userId) {
+      const { data: profile } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', userId)
+        .single()
+
+      if (isUserRole(profile?.role)) {
+        router.replace(getRoleHome(profile.role))
+        return
+      }
+    }
+
+    // Fallback to the server-side redirect if the profile row has not reached the client yet.
     router.replace('/')
   }
 

@@ -10,7 +10,7 @@ import { UserPlus, Eye, EyeOff, CheckCircle } from 'lucide-react'
 import { ROLE_LABELS } from '@/lib/roles'
 import type { UserRole } from '@/types'
 
-const creatableRoles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops']
+const creatableRoles: UserRole[] = ['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops', 'hr']
 
 const roleColors: Record<string, string> = {
   admin: 'border-violet-300 bg-violet-50 text-violet-700',
@@ -18,6 +18,7 @@ const roleColors: Record<string, string> = {
   transport_team: 'border-orange-300 bg-orange-50 text-orange-700',
   transporter: 'border-emerald-300 bg-emerald-50 text-emerald-700',
   plant_ops: 'border-cyan-300 bg-cyan-50 text-cyan-700',
+  hr: 'border-rose-300 bg-rose-50 text-rose-700',
 }
 
 export function CreateUserForm() {
@@ -60,8 +61,12 @@ export function CreateUserForm() {
       if (!res.ok) throw new Error(data.error)
       setCreated({ email: form.email, role: form.role, password: form.password })
       toast({ title: 'User created!', description: `${form.email} has been added.`, variant: 'success' })
-    } catch (err: any) {
-      toast({ title: 'Error creating user', description: err.message, variant: 'error' })
+    } catch (err: unknown) {
+      toast({
+        title: 'Error creating user',
+        description: err instanceof Error ? err.message : 'Unable to create user',
+        variant: 'error',
+      })
     } finally {
       setLoading(false)
     }

@@ -1,11 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { createClient, createServiceClient } from '@/lib/supabase/server'
 import { redirect } from 'next/navigation'
 import { PageHeader } from '@/components/layout/page-header'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Users, Truck, FileText, IndianRupee, Package, Trophy, CheckCircle, Clock, AlertCircle } from 'lucide-react'
+import { Users, Truck, FileText, IndianRupee, Package, Trophy, CheckCircle, Clock, AlertCircle, FileCheck2, Briefcase, CalendarCheck2 } from 'lucide-react'
 import Link from 'next/link'
 import { getAdminUserDirectory } from '@/lib/admin-users'
 import { buildPlantDashboardData, formatCurrency, formatNumber } from '@/lib/plant'
+import { getPendingBillApprovalCountSafe } from '@/lib/bills'
+import { buildHrDashboardData } from '@/lib/hr'
+import { EnsureHrUserButton } from '@/components/hr/ensure-hr-user-button'
 
 function StatCard({ label, value, sub, icon: Icon, color, href }: {
   label: string; value: string | number; sub?: string; icon: any; color: string; href?: string
@@ -31,11 +35,12 @@ export default async function AdminPage() {
   const serviceClient = await createServiceClient()
   const today = new Date().toISOString().split('T')[0]
 
+  const pendingBillsStatePromise = getPendingBillApprovalCountSafe(serviceClient)
+
   const [
     users,
     { data: loads },
     { data: bids },
-    { data: awards },
     { data: invoices },
     { data: productionLogs },
     { data: rawMaterials },
@@ -43,11 +48,14 @@ export default async function AdminPage() {
     { data: dispatches },
     { data: warehouseItems },
     { data: warehouseMovements },
+    { data: employees },
+    { data: attendance },
+    { data: leaves },
+    { data: hrDocuments },
   ] = await Promise.all([
     getAdminUserDirectory(serviceClient),
     serviceClient.from('transport_loads').select('status'),
     serviceClient.from('transport_bids').select('id, bid_amount'),
-    serviceClient.from('awarded_loads').select('final_amount'),
     serviceClient.from('invoices').select('status, total_amount, due_date, paid_amount'),
     serviceClient.from('plant_production_logs').select('*').order('date', { ascending: false }),
     serviceClient.from('raw_materials').select('id, material_name, unit, min_level, created_at'),
@@ -55,12 +63,17 @@ export default async function AdminPage() {
     serviceClient.from('fg_dispatches').select('*').order('date', { ascending: false }),
     serviceClient.from('warehouse_items').select('*').order('updated_at', { ascending: false }),
     serviceClient.from('warehouse_movements').select('*').order('date', { ascending: false }),
+    serviceClient.from('employees').select('*').order('created_at', { ascending: false }),
+    serviceClient.from('attendance').select('id, employee_id, date, check_in, check_out, status, biometric_ref, created_at, employee:employees(id, name, department, designation)').order('date', { ascending: false }),
+    serviceClient.from('leaves').select('id, employee_id, type, from_date, to_date, status, approved_by, reason, created_at, employee:employees(id, name, department, designation)').order('created_at', { ascending: false }),
+    serviceClient.from('employee_documents').select('id, employee_id, doc_type, file_url, expires_on, created_at, employee:employees(id, name, department)').order('created_at', { ascending: false }),
   ])
+
+  const pendingBillsState = await pendingBillsStatePromise
 
   const allProfiles = users || []
   const allLoads = loads || []
   const allBids = bids || []
-  const allAwards = awards || []
   const allInvoices = invoices || []
   const plantTodayProduction = (productionLogs || [])
     .filter((row: any) => row.date === today)
@@ -94,6 +107,12 @@ export default async function AdminPage() {
   const hotWarehouseItems = [...(warehouseItems || [])]
     .sort((a: any, b: any) => ((Number(b.current_stock || 0) * Number(b.unit_rate || 0)) - (Number(a.current_stock || 0) * Number(a.unit_rate || 0))))
     .slice(0, 4)
+  const hrDashboard = buildHrDashboardData(
+    (employees || []) as any,
+    (attendance || []) as any,
+    (leaves || []) as any,
+    (hrDocuments || []) as any
+  )
 
   // User stats
   const roleCounts = allProfiles.reduce((acc: Record<string, number>, p) => {
@@ -141,10 +160,11 @@ export default async function AdminPage() {
     transport_team: 'bg-orange-100 text-orange-700',
     transporter: 'bg-emerald-100 text-emerald-700',
     plant_ops: 'bg-cyan-100 text-cyan-700',
+    hr: 'bg-rose-100 text-rose-700',
   }
   const roleLabels: Record<string, string> = {
     admin: 'Admin', accounts: 'Accounts',
-    transport_team: 'Transport Team', transporter: 'Transporter', plant_ops: 'Plant Ops',
+    transport_team: 'Transport Team', transporter: 'Transporter', plant_ops: 'Plant Ops', hr: 'HR',
   }
 
   return (
@@ -152,6 +172,7 @@ export default async function AdminPage() {
       <PageHeader
         title="Admin Overview"
         description="System-wide analytics across all business modules"
+        actions={<EnsureHrUserButton />}
       />
 
       {/* Accounts & Invoices */}
@@ -159,11 +180,12 @@ export default async function AdminPage() {
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
           <FileText className="h-3.5 w-3.5" /> Accounts &amp; Invoices
         </h2>
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-6 gap-3">
           <StatCard label="Total Invoices" value={allInvoices.length} icon={FileText} color="text-gray-700" href="/dashboard/invoices" />
           <StatCard label="Paid" value={paidInvoices.length} icon={CheckCircle} color="text-green-600" href="/dashboard/invoices" />
           <StatCard label="Pending" value={pendingInvoices.length} icon={Clock} color="text-blue-600" href="/dashboard/invoices" />
           <StatCard label="Overdue" value={overdueInvoices.length} icon={AlertCircle} color="text-red-600" href="/dashboard/invoices" />
+          <StatCard label="Pending Bill Approvals" value={pendingBillsState.data} sub={pendingBillsState.unavailable ? 'setup pending' : undefined} icon={FileCheck2} color="text-violet-600" href="/admin/bills" />
           <StatCard
             label="Outstanding"
             value={fmtAmount(outstandingAmount)}
@@ -309,6 +331,63 @@ export default async function AdminPage() {
         </div>
       </div>
 
+      <div className="mb-6">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+          <Briefcase className="h-3.5 w-3.5" /> Human Resources
+        </h2>
+        <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 mb-3">
+          <StatCard label="Employees" value={hrDashboard.cards.totalEmployees} icon={Users} color="text-rose-700" href="/hr/employees" />
+          <StatCard label="Present Today" value={hrDashboard.cards.presentToday} icon={CalendarCheck2} color="text-emerald-600" href="/hr/attendance" />
+          <StatCard label="On Leave" value={hrDashboard.cards.onLeave} icon={Clock} color="text-amber-600" href="/hr/leaves" />
+          <StatCard label="New Joinees" value={hrDashboard.cards.newJoinees} icon={Users} color="text-blue-600" href="/hr/employees" />
+          <StatCard label="Salary Base" value={hrDashboard.cards.salaryLabel} icon={IndianRupee} color="text-violet-600" href="/hr/payroll" />
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">HR Alerts</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-2">
+              {hrDashboard.expiringDocumentAlerts.slice(0, 3).map(document => (
+                <div key={document.id} className="rounded-lg border border-amber-100 bg-amber-50 px-3 py-2">
+                  <p className="text-sm font-medium text-amber-800">{document.employee?.name || 'Employee'} · {document.doc_type}</p>
+                  <p className="text-xs text-amber-700">Expiry on {document.expires_on}</p>
+                </div>
+              ))}
+              {hrDashboard.lowAttendanceAlerts.slice(0, 3).map(alert => (
+                <div key={alert.employee.id} className="rounded-lg border border-rose-100 bg-rose-50 px-3 py-2">
+                  <p className="text-sm font-medium text-rose-800">{alert.employee.name}</p>
+                  <p className="text-xs text-rose-700">Attendance at {alert.rate}% in the last 30 days</p>
+                </div>
+              ))}
+              {hrDashboard.expiringDocumentAlerts.length === 0 && hrDashboard.lowAttendanceAlerts.length === 0 && (
+                <p className="text-sm text-gray-500">No HR alerts right now.</p>
+              )}
+            </CardContent>
+          </Card>
+          <Card>
+            <CardHeader className="pb-3">
+              <CardTitle className="text-sm">HR Quick Access</CardTitle>
+            </CardHeader>
+            <CardContent className="pt-0 space-y-2">
+              {[
+                { href: '/hr', label: 'Open HR Dashboard', meta: 'Overview and charts' },
+                { href: '/admin/create-user', label: 'Create HR User', meta: 'Assign role = HR' },
+                { href: '/hr/documents', label: 'Review HR Documents', meta: `${(hrDocuments || []).length} files tracked` },
+              ].map(item => (
+                <Link key={item.href} href={item.href} className="flex items-center justify-between rounded-lg border border-gray-100 px-3 py-2 hover:bg-gray-50">
+                  <div>
+                    <p className="text-sm font-medium text-gray-900">{item.label}</p>
+                    <p className="text-xs text-gray-400">{item.meta}</p>
+                  </div>
+                  <span className="text-sm text-violet-600">Open</span>
+                </Link>
+              ))}
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
       {/* Users */}
       <div className="mb-6">
         <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-3 flex items-center gap-2">
@@ -333,7 +412,7 @@ export default async function AdminPage() {
           <Card>
             <CardHeader className="pb-3"><CardTitle className="text-sm">Users by Role</CardTitle></CardHeader>
             <CardContent className="pt-0 space-y-2">
-              {['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops'].map(role => {
+              {['admin', 'accounts', 'transport_team', 'transporter', 'plant_ops', 'hr'].map(role => {
                 const count = roleCounts[role] || 0
                 return (
                   <div key={role} className="flex items-center justify-between">
